@@ -1,8 +1,4 @@
-require("dotenv").config({ path: ".env.test" });
-
-const { PrismaClient } = require("@prisma/client");
-
-const prisma = new PrismaClient();
+const prisma = require("../src/lib/prisma");
 
 global.prisma = prisma;
 
@@ -10,15 +6,16 @@ beforeAll(async () => {
   await prisma.$connect();
 });
 
-afterAll(async () => {
-  await prisma.$disconnect();
+afterEach(async () => {
+
+  const tables = ["User", "Organization", "RefreshToken"];
+
+  for (const table of tables) {
+    await prisma.$executeRawUnsafe(`TRUNCATE TABLE "${table}" CASCADE;`);
+  }
+
 });
 
-beforeEach(async () => {
-  await prisma.refreshToken.deleteMany();
-  await prisma.auditLog.deleteMany();
-  await prisma.order.deleteMany();
-  await prisma.product.deleteMany();
-  await prisma.user.deleteMany();
-  await prisma.organization.deleteMany();
+afterAll(async () => {
+  await prisma.$disconnect();
 });

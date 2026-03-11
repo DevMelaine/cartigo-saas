@@ -1,5 +1,6 @@
 const request = require("supertest");
 const app = require("../../src/app");
+const { seedTestUser } = require("../seed");
 
 // helper that registers a user using the public endpoint
 async function registerAdmin(email = "login@test.com") {

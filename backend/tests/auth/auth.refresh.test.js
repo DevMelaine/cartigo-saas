@@ -1,9 +1,41 @@
 const request = require("supertest");
 const app = require("../../src/app");
+const { seedTestUser } = require("../seed");
 const { PrismaClient } = require("@prisma/client");
 const tokenService = require("../../src/services/tokenService");
+const bcrypt = require("bcrypt");
 
-const prisma = global.prisma;
+let prisma;
+let user;
+let organization;
+
+beforeAll(() => {
+  prisma = global.prisma;
+});
+
+beforeEach(async () => {
+
+  const password = await bcrypt.hash("password123", 10);
+
+  // créer organisation
+  organization = await prisma.organization.create({
+    data: {
+      name: "Test Organization"
+    }
+  });
+
+  // créer utilisateur lié à l'organisation
+  user = await prisma.user.create({
+    data: {
+      name: "Refresh Test User",
+      email: "refresh@test.com",
+      password,
+      role: "ADMIN",
+      organizationId: organization.id
+    }
+  });
+
+});
 
 // helper that registers a user and returns login tokens
 async function loginAndGetRefresh() {

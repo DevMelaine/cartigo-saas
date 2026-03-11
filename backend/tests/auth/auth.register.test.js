@@ -1,5 +1,6 @@
 const request = require("supertest");
 const app = require("../../src/app");
+const { seedTestUser } = require("../seed");
 
 /**
  * These tests verify the organization registration endpoint.

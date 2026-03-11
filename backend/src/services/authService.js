@@ -1,7 +1,8 @@
 const bcrypt = require("bcrypt");
 const { PrismaClient } = require("@prisma/client");
 
-const prisma = new PrismaClient();
+// share prisma instance when available (tests set global.prisma)
+const prisma = global.prisma || new PrismaClient();
 
 function validateRegisterOrganizationInput(body) {
   const errors = [];
