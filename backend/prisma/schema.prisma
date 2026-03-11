@@ -5,8 +5,7 @@
 // Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
 
 generator client {
-  provider = "prisma-client"
-  output   = "../generated/prisma"
+  provider = "prisma-client-js"
 }
 
 datasource db {
@@ -15,7 +14,7 @@ datasource db {
 }
 
 model Organization {
-  id        String   @id @default(uuid())
+  id         String   @id @default(uuid())
   name      String
   address   String?
   createdAt DateTime @default(now())
@@ -33,8 +32,14 @@ model User {
   role           Role
   createdAt      DateTime @default(now())
 
+  failedLoginAttempts Int       @default(0)
+  lockUntil           DateTime?
+
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id])
+
+  refreshTokens RefreshToken[]
+  auditLogs     AuditLog[]
 }
 
 enum Role {
@@ -62,4 +67,24 @@ model Order {
 
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id])
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  tokenHash String
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+}
+
+model AuditLog {
+  id             String   @id @default(uuid())
+  userId         String?
+  user           User?    @relation(fields: [userId], references: [id])
+  organizationId String?
+  action         String
+  ipAddress      String?
+  userAgent      String?
+  createdAt      DateTime @default(now())
 }
