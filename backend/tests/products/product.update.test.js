@@ -121,12 +121,12 @@ describe("PUT /api/products/:id", () => {
     expect(res.body.success).toBe(false);
   });
 
-  it("should not allow EMPLOYEE to update product", async () => {
+  it("should not allow STAFF to update product", async () => {
     const adminToken = await getAuthToken(app);
     const product = await createProduct(adminToken);
 
-    // generate a token for an EMPLOYEE within the same organization
-    const employeeToken = await getTokenForRole(app, "EMPLOYEE");
+    // generate a token for a STAFF within the same organization
+    const employeeToken = await getTokenForRole(app, "STAFF");
 
     const res = await request(app)
       .put(`/api/products/${product.id}`)
@@ -228,8 +228,8 @@ describe("Role-based authorization", () => {
     expect(res.body.success).toBe(true);
   });
 
-  it("should forbid EMPLOYEE from creating products", async () => {
-    const token = await getTokenForRole(app, "EMPLOYEE");
+  it("should forbid STAFF from creating products", async () => {
+    const token = await getTokenForRole(app, "STAFF");
     const res = await request(app)
       .post("/api/products")
       .set("Authorization", `Bearer ${token}`)

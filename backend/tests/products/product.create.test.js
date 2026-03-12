@@ -222,8 +222,8 @@ describe("POST /api/products", () => {
     );
   });
 
-  it("should forbid EMPLOYEE from creating products", async () => {
-    const token = await getTokenForRole(app, "EMPLOYEE");
+  it("should forbid STAFF from creating products", async () => {
+    const token = await getTokenForRole(app, "STAFF");
 
     const res = await request(app)
       .post("/api/products")
