@@ -4,6 +4,8 @@ const authRoutes = require("./routes/authRoutes");
 const testRoutes = require("./routes/testRoutes");
 const productRoutes = require("./routes/productRoutes");
 const userRoutes = require("./routes/userRoutes");
+const cartRoutes = require("./routes/cart.routes");
+const orderRoutes = require("./routes/order.routes");
 const customerRoutes = require("./routes/customerRoutes");
 const categoryRoutes = require("./routes/categoryRoutes");
 const inventoryRoutes = require("./routes/inventoryRoutes");
@@ -25,6 +27,8 @@ app.use("/api/users", userRoutes);
 app.use("/api/customers", customerRoutes);
 app.use("/api/categories", categoryRoutes);
 app.use("/api/inventory", inventoryRoutes);
+app.use("/api/cart", cartRoutes);
+app.use("/api/orders", orderRoutes);
 
 // swagger documentation endpoint
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));

@@ -68,6 +68,9 @@ model Customer {
   failedLoginAttempts Int       @default(0)
   lockUntil           DateTime?
 
+  orders Order[]
+  carts  Cart[]
+
   refreshCustomerToken RefreshCustomerToken[]
   customerAuditLog     CustomerAuditLog[]
   CustomerRefreshToken CustomerRefreshToken[]
@@ -93,7 +96,8 @@ model Product {
   stock             Int      @default(0)
   sku               String
   barcode           String?
-  category          String?
+  categoryId        String?
+  category          Category? @relation(fields: [categoryId], references: [id], onDelete: Cascade)
   imageUrl          String?
   isActive          Boolean  @default(true)
   lowStockThreshold Int?
@@ -105,6 +109,9 @@ model Product {
 
   inventory Inventory?
 
+  orderItems OrderItem[]
+  cartItems CartItem[]
+
   @@unique([organizationId, sku])
   @@index([organizationId])
   @@index([name])
@@ -112,13 +119,43 @@ model Product {
 }
 
 model Order {
-  id        String   @id @default(uuid())
-  total     Float
-  status    String
-  createdAt DateTime @default(now())
-
+  id             String      @id @default(uuid())
+  customerId     String
   organizationId String
-  organization   Organization @relation(fields: [organizationId], references: [id])
+  status         OrderStatus @default(PENDING)
+  total          Decimal     @db.Decimal(10,2)
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  customer Customer @relation(fields: [customerId], references: [id])
+  organization Organization @relation(fields: [organizationId], references: [id])
+
+  items    OrderItem[]
+
+  @@index([customerId])
+  @@index([organizationId])
+}
+
+model OrderItem {
+  id        String   @id @default(uuid())
+  orderId   String
+  productId String
+  quantity  Int
+  price     Decimal  @db.Decimal(10,2)
+
+  order   Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id])
+
+  @@index([orderId])
+}
+
+enum OrderStatus {
+  PENDING
+  PAID
+  PROCESSING
+  SHIPPED
+  DELIVERED
+  CANCELLED
 }
 
 model RefreshToken {
@@ -170,6 +207,8 @@ model Category {
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
+  products        Product[]
+
   @@unique([organizationId, name])
   @@index([organizationId])
 }
@@ -186,5 +225,35 @@ model Inventory {
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@index([organizationId])
+  @@index([productId])
+}
+
+model Cart {
+  id             String   @id @default(uuid())
+  customerId     String
+  organizationId String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  items CartItem[]
+
+  @@unique([customerId, organizationId])
+  @@index([organizationId])
+}
+
+model CartItem {
+  id            String   @id @default(uuid())
+  cartId        String
+  productId     String
+  quantity      Int
+  priceSnapshot Decimal  @db.Decimal(10,2)
+  createdAt     DateTime @default(now())
+
+  cart    Cart    @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id])
+
+  @@index([cartId])
   @@index([productId])
 }

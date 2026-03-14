@@ -10,6 +10,85 @@ const { validateCreateProduct, validateUpdateProduct } = require("../validators/
 // use shared Prisma client when running under tests (jest.setup.js sets global.prisma)
 const prisma = global.prisma || new PrismaClient();
 
+const productSelect = {
+  id: true,
+  name: true,
+  description: true,
+  price: true,
+  costPrice: true,
+  stock: true,
+  sku: true,
+  barcode: true,
+  categoryId: true,
+  imageUrl: true,
+  isActive: true,
+  lowStockThreshold: true,
+  createdAt: true,
+  updatedAt: true,
+  category: {
+    select: {
+      id: true,
+      name: true,
+      organizationId: true,
+    },
+  },
+};
+
+function normalizeCategoryName(category) {
+  if (typeof category !== "string") {
+    return null;
+  }
+
+  const trimmedCategory = category.trim();
+  return trimmedCategory.length > 0 ? trimmedCategory : null;
+}
+
+async function findOrCreateCategory(organizationId, categoryName) {
+  const normalizedCategory = normalizeCategoryName(categoryName);
+
+  if (!normalizedCategory) {
+    return null;
+  }
+
+  return prisma.category.upsert({
+    where: {
+      organizationId_name: {
+        organizationId,
+        name: normalizedCategory,
+      },
+    },
+    update: {},
+    create: {
+      name: normalizedCategory,
+      organizationId,
+    },
+    select: {
+      id: true,
+      name: true,
+    },
+  });
+}
+
+function mapProduct(product) {
+  return {
+    id: product.id,
+    name: product.name,
+    description: product.description,
+    price: Number(product.price),
+    costPrice: product.costPrice === null || product.costPrice === undefined ? null : Number(product.costPrice),
+    stock: product.stock,
+    sku: product.sku,
+    barcode: product.barcode,
+    categoryId: product.categoryId || product.category?.id || null,
+    category: product.category ? product.category.name : null,
+    imageUrl: product.imageUrl,
+    isActive: product.isActive,
+    lowStockThreshold: product.lowStockThreshold,
+    createdAt: product.createdAt,
+    updatedAt: product.updatedAt,
+  };
+}
+
 /**
  * Create a new product
  * Validates input and enforces SKU uniqueness per organization
@@ -25,11 +104,12 @@ async function createProduct(data, organizationId) {
 
   const { name, description, price, costPrice, stock, sku, barcode, category, imageUrl, lowStockThreshold } = data;
 
-  // check if SKU already exists within this organization
+  const normalizedSku = sku.toUpperCase();
+
   const existingSku = await prisma.product.findFirst({
     where: {
       organizationId,
-      sku: sku.toUpperCase(),
+      sku: normalizedSku,
     },
   });
 
@@ -39,7 +119,8 @@ async function createProduct(data, organizationId) {
     throw error;
   }
 
-  // create the product
+  const resolvedCategory = await findOrCreateCategory(organizationId, category);
+
   const product = await prisma.product.create({
     data: {
       name: name.trim(),
@@ -47,16 +128,17 @@ async function createProduct(data, organizationId) {
       price: parseFloat(price),
       costPrice: costPrice ? parseFloat(costPrice) : null,
       stock: parseInt(stock),
-      sku: sku.toUpperCase(),
+      sku: normalizedSku,
       barcode: barcode?.trim(),
-      category: category?.trim(),
       imageUrl: imageUrl?.trim(),
       lowStockThreshold: lowStockThreshold ? parseInt(lowStockThreshold) : null,
       organizationId,
+      categoryId: resolvedCategory ? resolvedCategory.id : null,
     },
+    select: productSelect,
   });
 
-  return product;
+  return mapProduct(product);
 }
 
 /**
@@ -66,8 +148,8 @@ async function getProducts(organizationId, filters = {}) {
   const { page = 1, limit = 10, search, category, sort = "createdAt", order = "desc" } = filters;
 
   const skip = (page - 1) * limit;
+  const normalizedCategory = normalizeCategoryName(category);
 
-  // build where clause
   const where = {
     organizationId,
     isActive: true,
@@ -81,34 +163,28 @@ async function getProducts(organizationId, filters = {}) {
     ];
   }
 
-  if (category) {
-    where.category = { contains: category, mode: "insensitive" };
+  if (normalizedCategory) {
+    where.category = {
+      is: {
+        organizationId,
+        name: {
+          equals: normalizedCategory,
+          mode: "insensitive",
+        },
+      },
+    };
   }
 
-  // validate sort field to prevent injection
   const validSortFields = ["name", "price", "stock", "createdAt", "updatedAt"];
   const sortField = validSortFields.includes(sort) ? sort : "createdAt";
-  const sortOrder = order.toLowerCase() === "asc" ? "asc" : "desc";
+  const sortOrder = order && order.toLowerCase() === "asc" ? "asc" : "desc";
 
-  // execute queries in parallel
   const [products, total] = await Promise.all([
     prisma.product.findMany({
       where,
       skip,
       take: limit,
-      select: {
-        id: true,
-        name: true,
-        price: true,
-        stock: true,
-        sku: true,
-        category: true,
-        imageUrl: true,
-        lowStockThreshold: true,
-        isActive: true,
-        createdAt: true,
-        updatedAt: true,
-      },
+      select: productSelect,
       orderBy: {
         [sortField]: sortOrder,
       },
@@ -119,7 +195,7 @@ async function getProducts(organizationId, filters = {}) {
   const totalPages = Math.ceil(total / limit);
 
   return {
-    data: products,
+    data: products.map(mapProduct),
     pagination: {
       page,
       limit,
@@ -138,8 +214,9 @@ async function getProductById(productId, organizationId) {
     where: {
       id: productId,
       organizationId,
-      isActive: true, // do not expose soft-deleted items
+      isActive: true,
     },
+    select: productSelect,
   });
 
   if (!product) {
@@ -148,7 +225,7 @@ async function getProductById(productId, organizationId) {
     throw error;
   }
 
-  return product;
+  return mapProduct(product);
 }
 
 /**
@@ -164,12 +241,12 @@ async function updateProduct(productId, data, organizationId) {
     throw error;
   }
 
-  // ensure product exists and belongs to organization
   const existingProduct = await prisma.product.findFirst({
     where: {
       id: productId,
       organizationId,
     },
+    select: productSelect,
   });
 
   if (!existingProduct) {
@@ -178,7 +255,6 @@ async function updateProduct(productId, data, organizationId) {
     throw error;
   }
 
-  // if SKU is being updated, check uniqueness
   if (data.sku && data.sku.toUpperCase() !== existingProduct.sku) {
     const skuExists = await prisma.product.findFirst({
       where: {
@@ -195,7 +271,6 @@ async function updateProduct(productId, data, organizationId) {
     }
   }
 
-  // build update object, only include fields that were provided
   const updateData = {};
   if (data.name !== undefined) updateData.name = data.name.trim();
   if (data.description !== undefined) updateData.description = data.description?.trim();
@@ -204,32 +279,33 @@ async function updateProduct(productId, data, organizationId) {
   if (data.stock !== undefined) updateData.stock = parseInt(data.stock);
   if (data.sku !== undefined) updateData.sku = data.sku.toUpperCase();
   if (data.barcode !== undefined) updateData.barcode = data.barcode?.trim();
-  if (data.category !== undefined) updateData.category = data.category?.trim();
   if (data.imageUrl !== undefined) updateData.imageUrl = data.imageUrl?.trim();
   if (data.isActive !== undefined) updateData.isActive = data.isActive;
   if (data.lowStockThreshold !== undefined) updateData.lowStockThreshold = data.lowStockThreshold ? parseInt(data.lowStockThreshold) : null;
 
-  // additional business rule: cost price cannot exceed selling price
-  if (
-    updateData.costPrice !== undefined &&
-    updateData.price !== undefined &&
-    updateData.costPrice > updateData.price
-  ) {
+  const finalPrice = updateData.price !== undefined ? updateData.price : Number(existingProduct.price);
+  const finalCostPrice = updateData.costPrice !== undefined
+    ? updateData.costPrice
+    : (existingProduct.costPrice === null || existingProduct.costPrice === undefined ? null : Number(existingProduct.costPrice));
+
+  if (finalCostPrice !== null && finalCostPrice > finalPrice) {
     const error = new Error("Cost price cannot be greater than selling price.");
     error.statusCode = 400;
     throw error;
   }
 
+  if (data.category !== undefined) {
+    const resolvedCategory = await findOrCreateCategory(organizationId, data.category);
+    updateData.categoryId = resolvedCategory ? resolvedCategory.id : null;
+  }
+
   const product = await prisma.product.update({
     where: { id: productId },
     data: updateData,
+    select: productSelect,
   });
 
-  return {
-  ...product,
-  price: parseFloat(product.price),
-  costPrice: product.costPrice ? parseFloat(product.costPrice) : null,
-};
+  return mapProduct(product);
 }
 
 /**
@@ -253,9 +329,10 @@ async function deleteProduct(productId, organizationId) {
   const updated = await prisma.product.update({
     where: { id: productId },
     data: { isActive: false },
+    select: productSelect,
   });
 
-  return updated;
+  return mapProduct(updated);
 }
 
 /**
@@ -282,8 +359,7 @@ async function getLowStockProducts(organizationId, limit = 20) {
     take: limit,
   });
 
-  // filter products where stock <= threshold
-  return products.filter((p) => p.stock <= p.lowStockThreshold);
+  return products.filter((product) => product.stock <= product.lowStockThreshold);
 }
 
 /**
@@ -307,7 +383,7 @@ async function getProductStats(organizationId) {
   return {
     totalProducts: stats._count,
     totalStock: stats._sum.stock || 0,
-    averagePrice: stats._avg.price || 0,
+    averagePrice: stats._avg.price ? Number(stats._avg.price) : 0,
   };
 }
 
@@ -320,3 +396,4 @@ module.exports = {
   getLowStockProducts,
   getProductStats,
 };
+

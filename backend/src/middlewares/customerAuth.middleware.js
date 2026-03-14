@@ -12,10 +12,16 @@ function customerAuthMiddleware(req, res, next) {
     if (decoded.role !== "CUSTOMER") {
       return res.status(403).json({ success: false, message: "Forbidden" });
     }
+
+    const customerId = decoded.customerId || decoded.userId;
+
     req.customer = {
-      customerId: decoded.userId || decoded.customerId,
+      id: customerId,
+      customerId,
+      organizationId: decoded.organizationId || null,
       role: decoded.role,
     };
+
     next();
   } catch (err) {
     return res.status(401).json({ success: false, message: "Invalid or expired token." });
