@@ -19,11 +19,12 @@ model Organization {
   address   String?
   createdAt DateTime @default(now())
 
-  users       User[]
-  products    Product[]
-  orders      Order[]
-  categories  Category[]
-  inventories Inventory[]
+  users        User[]
+  products     Product[]
+  orders       Order[]
+  categories   Category[]
+  inventories  Inventory[]
+  deliveryJobs DeliveryJob[]
 }
 
 model User {
@@ -88,21 +89,21 @@ model CustomerRefreshToken {
 }
 
 model Product {
-  id                String   @id @default(uuid())
+  id                String    @id @default(uuid())
   name              String
   description       String?
-  price             Decimal  @db.Decimal(10, 2)
-  costPrice         Decimal? @db.Decimal(10, 2)
-  stock             Int      @default(0)
+  price             Decimal   @db.Decimal(10, 2)
+  costPrice         Decimal?  @db.Decimal(10, 2)
+  stock             Int       @default(0)
   sku               String
   barcode           String?
   categoryId        String?
   category          Category? @relation(fields: [categoryId], references: [id], onDelete: Cascade)
   imageUrl          String?
-  isActive          Boolean  @default(true)
+  isActive          Boolean   @default(true)
   lowStockThreshold Int?
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
 
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
@@ -110,7 +111,7 @@ model Product {
   inventory Inventory?
 
   orderItems OrderItem[]
-  cartItems CartItem[]
+  cartItems  CartItem[]
 
   @@unique([organizationId, sku])
   @@index([organizationId])
@@ -119,29 +120,36 @@ model Product {
 }
 
 model Order {
-  id             String      @id @default(uuid())
-  customerId     String
-  organizationId String
-  status         OrderStatus @default(PENDING)
-  total          Decimal     @db.Decimal(10,2)
-  createdAt      DateTime    @default(now())
-  updatedAt      DateTime    @updatedAt
+  id               String            @id @default(uuid())
+  customerId       String
+  organizationId   String
+  status           OrderStatus       @default(PENDING_PAYMENT)
+  total            Decimal           @db.Decimal(10, 2)
+  readyForDelivery Boolean           @default(false)
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
 
-  customer Customer @relation(fields: [customerId], references: [id])
+  customer     Customer     @relation(fields: [customerId], references: [id])
   organization Organization @relation(fields: [organizationId], references: [id])
 
-  items    OrderItem[]
+  items       OrderItem[]
+  payments    Payment[]
+  auditLogs   OrderAuditLog[]
+  deliveryJob DeliveryJob?
 
   @@index([customerId])
   @@index([organizationId])
+  @@index([status])
+  @@index([createdAt])
+  @@index([organizationId, status])
 }
 
 model OrderItem {
-  id        String   @id @default(uuid())
+  id        String  @id @default(uuid())
   orderId   String
   productId String
   quantity  Int
-  price     Decimal  @db.Decimal(10,2)
+  price     Decimal @db.Decimal(10, 2)
 
   order   Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
   product Product @relation(fields: [productId], references: [id])
@@ -149,13 +157,90 @@ model OrderItem {
   @@index([orderId])
 }
 
+model OrderAuditLog {
+  id             String      @id @default(uuid())
+  orderId        String
+  organizationId String
+  changedByUserId String?
+  changedByRole  String?
+  previousStatus OrderStatus
+  newStatus      OrderStatus
+  action         String      @default("STATUS_CHANGED")
+  createdAt      DateTime    @default(now())
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
+  @@index([organizationId])
+  @@index([createdAt])
+  @@index([orderId, createdAt])
+}
+
+model DeliveryJob {
+  id                String            @id @default(uuid())
+  orderId           String            @unique
+  organizationId    String
+  assignedCourierId String?
+  status            DeliveryJobStatus @default(OPEN)
+  acceptedAt        DateTime?
+  deliveredAt       DateTime?
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+
+  order        Order        @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@index([status])
+}
+
+model Payment {
+  id               String          @id @default(uuid())
+  orderId          String
+  provider         PaymentProvider
+  txReference      String          @unique
+  paymentReference String?         @unique
+  amount           Decimal         @db.Decimal(10, 2)
+  method           String?
+  status           PaymentStatus   @default(PENDING)
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
+  @@index([provider, status])
+}
+
 enum OrderStatus {
-  PENDING
+  PENDING_PAYMENT
   PAID
   PROCESSING
-  SHIPPED
+  READY_FOR_DELIVERY
+  IN_DELIVERY
   DELIVERED
   CANCELLED
+}
+
+enum DeliveryJobStatus {
+  OPEN
+  ASSIGNED
+  IN_DELIVERY
+  COMPLETED
+  CANCELLED
+}
+
+enum PaymentProvider {
+  PAYGATE
+  STRIPE
+  PAYSTACK
+  FLUTTERWAVE
+}
+
+enum PaymentStatus {
+  PENDING
+  SUCCESS
+  FAILED
 }
 
 model RefreshToken {
@@ -207,20 +292,19 @@ model Category {
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
-  products        Product[]
+  products Product[]
 
   @@unique([organizationId, name])
   @@index([organizationId])
 }
 
 model Inventory {
-  id           String   @id @default(uuid())
-  quantity     Int      @default(0)
-  minStock     Int      @default(0)
-  updatedAt    DateTime @updatedAt
-  productId    String   @unique
-  product      Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
-
+  id             String   @id @default(uuid())
+  quantity       Int      @default(0)
+  minStock       Int      @default(0)
+  updatedAt      DateTime @updatedAt
+  productId      String   @unique
+  product        Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
@@ -248,7 +332,7 @@ model CartItem {
   cartId        String
   productId     String
   quantity      Int
-  priceSnapshot Decimal  @db.Decimal(10,2)
+  priceSnapshot Decimal  @db.Decimal(10, 2)
   createdAt     DateTime @default(now())
 
   cart    Cart    @relation(fields: [cartId], references: [id], onDelete: Cascade)
