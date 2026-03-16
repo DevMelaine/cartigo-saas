@@ -3,6 +3,8 @@ const { PaymentProvider, PaymentStatus } = require("@prisma/client");
 const prisma = global.prisma || require("../lib/prisma");
 const paygateProvider = require("./paygate.provider");
 const { ORDER_STATUS } = require("../utils/orderLifecycle");
+const notificationService = require("./notification.service");
+const { NOTIFICATION_TYPES } = require("../utils/notificationEvents");
 
 function normalizeAmount(value) {
   return Number(Number(value).toFixed(2));
@@ -204,7 +206,7 @@ class PaymentService {
       };
     }
 
-    return this.prisma.$transaction(async (tx) => {
+    const result = await this.prisma.$transaction(async (tx) => {
       const currentPayment = await tx.payment.findUnique({
         where: {
           id: payment.id,
@@ -374,6 +376,14 @@ class PaymentService {
         order: updatedOrder,
       };
     });
+
+    if (!result.alreadyProcessed) {
+      await notificationService.notifyEvent(NOTIFICATION_TYPES.ORDER_PAID, {
+        orderId: result.order.id,
+      });
+    }
+
+    return result;
   }
 
   async processPayGateWebhook(payload) {

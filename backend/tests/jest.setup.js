@@ -8,6 +8,8 @@ beforeAll(async () => {
 
 afterEach(async () => {
   const tables = [
+    "DeviceToken",
+    "Notification",
     "DeliveryJob",
     "OrderAuditLog",
     "Payment",

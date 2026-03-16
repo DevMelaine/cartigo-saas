@@ -4,6 +4,8 @@ const {
   isReadyForDelivery,
   isValidOrderStatusTransition,
 } = require("../utils/orderLifecycle");
+const notificationService = require("./notification.service");
+const { NOTIFICATION_TYPES } = require("../utils/notificationEvents");
 
 const prisma = global.prisma || new PrismaClient();
 
@@ -77,6 +79,32 @@ function normalizeOrder(order) {
   };
 }
 
+function buildLowStockEvent(product, previousQuantity, nextQuantity) {
+  const threshold = product.lowStockThreshold ?? product.inventory?.minStock ?? 0;
+
+  if (!threshold || previousQuantity <= threshold || nextQuantity > threshold) {
+    return null;
+  }
+
+  return {
+    organizationId: product.organizationId,
+    productId: product.id,
+    productName: product.name,
+    quantity: nextQuantity,
+    lowStockThreshold: threshold,
+  };
+}
+
+function dedupeLowStockEvents(events) {
+  const byProduct = new Map();
+
+  for (const event of events) {
+    byProduct.set(event.productId, event);
+  }
+
+  return Array.from(byProduct.values());
+}
+
 function assertRoleCanChangeStatus(role, currentStatus, nextStatus) {
   if (role === "ADMIN") {
     return;
@@ -124,7 +152,7 @@ class OrderService {
    * checkout and payment flows keep their current semantics.
    */
   static async checkout({ customerId, organizationId }) {
-    return prisma.$transaction(async (tx) => {
+    const result = await prisma.$transaction(async (tx) => {
       const cart = await tx.cart.findFirst({
         ...buildCartLookup(customerId, organizationId),
         include: {
@@ -145,6 +173,7 @@ class OrderService {
       }
 
       let total = 0;
+      const lowStockEvents = [];
 
       for (const item of cart.items) {
         const inventory = item.product.inventory;
@@ -170,6 +199,10 @@ class OrderService {
       });
 
       for (const item of cart.items) {
+        const previousQuantity = item.product.inventory.quantity;
+        const nextQuantity = previousQuantity - item.quantity;
+        const lowStockEvent = buildLowStockEvent(item.product, previousQuantity, nextQuantity);
+
         await tx.orderItem.create({
           data: {
             orderId: order.id,
@@ -189,6 +222,10 @@ class OrderService {
             },
           },
         });
+
+        if (lowStockEvent) {
+          lowStockEvents.push(lowStockEvent);
+        }
       }
 
       await tx.cartItem.deleteMany({
@@ -198,10 +235,19 @@ class OrderService {
       });
 
       return {
-        ...order,
-        total: Number(order.total),
+        order: {
+          ...order,
+          total: Number(order.total),
+        },
+        lowStockEvents,
       };
     });
+
+    for (const event of dedupeLowStockEvents(result.lowStockEvents)) {
+      await notificationService.notifyEvent(NOTIFICATION_TYPES.LOW_STOCK, event);
+    }
+
+    return result.order;
   }
 
   /**
@@ -342,7 +388,7 @@ class OrderService {
 
     assertRoleCanChangeStatus(role, existingOrder.status, nextStatus);
 
-    return prisma.$transaction(async (tx) => {
+    const updatedOrder = await prisma.$transaction(async (tx) => {
       const claimedUpdate = await tx.order.updateMany({
         where: {
           id: orderId,
@@ -372,15 +418,27 @@ class OrderService {
         },
       });
 
-      const updatedOrder = await tx.order.findUnique({
+      return tx.order.findUnique({
         where: {
           id: orderId,
         },
         include: buildOrderInclude({ includeAuditLogs: true }),
       });
-
-      return normalizeOrder(updatedOrder);
     });
+
+    if (nextStatus === ORDER_STATUS.PAID) {
+      await notificationService.notifyEvent(NOTIFICATION_TYPES.ORDER_PAID, {
+        orderId,
+      });
+    }
+
+    if (nextStatus === ORDER_STATUS.READY_FOR_DELIVERY) {
+      await notificationService.notifyEvent(NOTIFICATION_TYPES.ORDER_READY, {
+        orderId,
+      });
+    }
+
+    return normalizeOrder(updatedOrder);
   }
 }
 

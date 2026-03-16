@@ -1,5 +1,7 @@
 const { PrismaClient } = require("@prisma/client");
 const { addStockSchema, removeStockSchema, updateInventorySchema } = require("../validators/inventory.validator");
+const notificationService = require("./notification.service");
+const { NOTIFICATION_TYPES } = require("../utils/notificationEvents");
 
 const prisma = global.prisma || new PrismaClient();
 
@@ -24,107 +26,40 @@ async function initializeInventory(productId, organizationId) {
   return inventory;
 }
 
-async function addStock(data, organizationId) {
-  const { error, value } = addStockSchema.validate(data, { abortEarly: false });
-  if (error) {
-    const err = new Error("Validation failed");
-    err.statusCode = 400;
-    err.details = error.details.map((d) => d.message);
-    throw err;
-  }
-
-  // Verify product belongs to organization
-  const product = await prisma.product.findFirst({
-    where: {
-      id: value.productId,
-      organizationId,
-    },
-  });
-
-  if (!product) {
-    const err = new Error("Product not found in your organization");
-    err.statusCode = 404;
-    throw err;
-  }
-
-  // Get or create inventory
-  let inventory = await prisma.inventory.findUnique({
-    where: { productId: value.productId },
-  });
-
-  if (!inventory) {
-    inventory = await initializeInventory(value.productId, organizationId);
-  }
-
-  // Update quantity
-  const updated = await prisma.inventory.update({
-    where: { productId: value.productId },
-    data: {
-      quantity: {
-        increment: value.quantity,
-      },
-    },
-  });
-
-  return updated;
+function buildValidationError(error) {
+  const err = new Error("Validation failed");
+  err.statusCode = 400;
+  err.details = error.details.map((d) => d.message);
+  return err;
 }
 
-async function removeStock(data, organizationId) {
-  const { error, value } = removeStockSchema.validate(data, { abortEarly: false });
-  if (error) {
-    const err = new Error("Validation failed");
-    err.statusCode = 400;
-    err.details = error.details.map((d) => d.message);
-    throw err;
+function shouldNotifyLowStock(product, previousInventory, updatedInventory) {
+  const threshold = product.lowStockThreshold ?? updatedInventory.minStock ?? previousInventory?.minStock ?? 0;
+  const previousQuantity = previousInventory?.quantity ?? 0;
+  const nextQuantity = updatedInventory.quantity;
+
+  if (!threshold) {
+    return false;
   }
 
-  // Verify product belongs to organization
-  const product = await prisma.product.findFirst({
-    where: {
-      id: value.productId,
-      organizationId,
-    },
-  });
-
-  if (!product) {
-    const err = new Error("Product not found in your organization");
-    err.statusCode = 404;
-    throw err;
-  }
-
-  // Get inventory
-  const inventory = await prisma.inventory.findUnique({
-    where: { productId: value.productId },
-  });
-
-  if (!inventory) {
-    const err = new Error("Inventory not found for this product");
-    err.statusCode = 404;
-    throw err;
-  }
-
-  // Check if enough stock
-  if (inventory.quantity < value.quantity) {
-    const err = new Error("Insufficient stock");
-    err.statusCode = 400;
-    throw err;
-  }
-
-  // Update quantity
-  const updated = await prisma.inventory.update({
-    where: { productId: value.productId },
-    data: {
-      quantity: {
-        decrement: value.quantity,
-      },
-    },
-  });
-
-  return updated;
+  return previousQuantity > threshold && nextQuantity <= threshold;
 }
 
-async function getInventoryByProductId(productId, organizationId) {
-  // Verify product belongs to organization
+async function maybeNotifyLowStock(product, previousInventory, updatedInventory) {
+  if (!shouldNotifyLowStock(product, previousInventory, updatedInventory)) {
+    return;
+  }
+
+  await notificationService.notifyEvent(NOTIFICATION_TYPES.LOW_STOCK, {
+    organizationId: product.organizationId,
+    productId: product.id,
+    productName: product.name,
+    quantity: updatedInventory.quantity,
+    lowStockThreshold: product.lowStockThreshold ?? updatedInventory.minStock,
+  });
+}
+
+async function getProductOrThrow(productId, organizationId) {
   const product = await prisma.product.findFirst({
     where: {
       id: productId,
@@ -138,7 +73,82 @@ async function getInventoryByProductId(productId, organizationId) {
     throw err;
   }
 
-  // Get or initialize inventory
+  return product;
+}
+
+async function addStock(data, organizationId) {
+  const { error, value } = addStockSchema.validate(data, { abortEarly: false });
+  if (error) {
+    throw buildValidationError(error);
+  }
+
+  const product = await getProductOrThrow(value.productId, organizationId);
+
+  let inventory = await prisma.inventory.findUnique({
+    where: { productId: value.productId },
+  });
+
+  if (!inventory) {
+    inventory = await initializeInventory(value.productId, organizationId);
+  }
+
+  const previousInventory = inventory;
+  const updated = await prisma.inventory.update({
+    where: { productId: value.productId },
+    data: {
+      quantity: {
+        increment: value.quantity,
+      },
+    },
+  });
+
+  await maybeNotifyLowStock(product, previousInventory, updated);
+
+  return updated;
+}
+
+async function removeStock(data, organizationId) {
+  const { error, value } = removeStockSchema.validate(data, { abortEarly: false });
+  if (error) {
+    throw buildValidationError(error);
+  }
+
+  const product = await getProductOrThrow(value.productId, organizationId);
+
+  const inventory = await prisma.inventory.findUnique({
+    where: { productId: value.productId },
+  });
+
+  if (!inventory) {
+    const err = new Error("Inventory not found for this product");
+    err.statusCode = 404;
+    throw err;
+  }
+
+  if (inventory.quantity < value.quantity) {
+    const err = new Error("Insufficient stock");
+    err.statusCode = 400;
+    throw err;
+  }
+
+  const previousInventory = inventory;
+  const updated = await prisma.inventory.update({
+    where: { productId: value.productId },
+    data: {
+      quantity: {
+        decrement: value.quantity,
+      },
+    },
+  });
+
+  await maybeNotifyLowStock(product, previousInventory, updated);
+
+  return updated;
+}
+
+async function getInventoryByProductId(productId, organizationId) {
+  await getProductOrThrow(productId, organizationId);
+
   let inventory = await prisma.inventory.findUnique({
     where: { productId },
   });
@@ -153,27 +163,11 @@ async function getInventoryByProductId(productId, organizationId) {
 async function updateInventory(productId, data, organizationId) {
   const { error, value } = updateInventorySchema.validate(data, { abortEarly: false });
   if (error) {
-    const err = new Error("Validation failed");
-    err.statusCode = 400;
-    err.details = error.details.map((d) => d.message);
-    throw err;
+    throw buildValidationError(error);
   }
 
-  // Verify product belongs to organization
-  const product = await prisma.product.findFirst({
-    where: {
-      id: productId,
-      organizationId,
-    },
-  });
+  const product = await getProductOrThrow(productId, organizationId);
 
-  if (!product) {
-    const err = new Error("Product not found in your organization");
-    err.statusCode = 404;
-    throw err;
-  }
-
-  // Get or initialize inventory
   let inventory = await prisma.inventory.findUnique({
     where: { productId },
   });
@@ -182,10 +176,13 @@ async function updateInventory(productId, data, organizationId) {
     inventory = await initializeInventory(productId, organizationId);
   }
 
+  const previousInventory = inventory;
   const updated = await prisma.inventory.update({
     where: { productId },
     data: value,
   });
+
+  await maybeNotifyLowStock(product, previousInventory, updated);
 
   return updated;
 }
