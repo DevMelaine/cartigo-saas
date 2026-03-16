@@ -4,58 +4,8 @@ const { PrismaClient } = require("@prisma/client");
 // share prisma instance when available (tests set global.prisma)
 const prisma = global.prisma || new PrismaClient();
 
-function validateRegisterOrganizationInput(body) {
-  const errors = [];
-
-  if (!body.name || typeof body.name !== "string") {
-    errors.push("Organization name is required.");
-  }
-  if (!body.adminName || typeof body.adminName !== "string") {
-    errors.push("Admin name is required.");
-  }
-  if (!body.email || typeof body.email !== "string") {
-    errors.push("Email is required.");
-  } else if (!/^\S+@\S+\.\S+$/.test(body.email)) {
-    errors.push("Email is invalid.");
-  }
-  if (!body.password || typeof body.password !== "string") {
-    errors.push("Password is required.");
-  } else if (body.password.length < 8) {
-    errors.push("Password must be at least 8 characters.");
-  }
-
-  return {
-    isValid: errors.length === 0,
-    errors,
-  };
-}
-
-function validateLoginInput(body) {
-  const errors = [];
-
-  if (!body.email || typeof body.email !== "string") {
-    errors.push("Email is required.");
-  }
-  if (!body.password || typeof body.password !== "string") {
-    errors.push("Password is required.");
-  }
-
-  return {
-    isValid: errors.length === 0,
-    errors,
-  };
-}
-
 async function registerOrganization(data) {
-  const { isValid, errors } = validateRegisterOrganizationInput(data);
-  if (!isValid) {
-    const error = new Error("Validation failed");
-    error.statusCode = 400;
-    error.details = errors;
-    throw error;
-  }
-
-  const { name, adminName, email, password } = data;
+  const { organizationName, categoryId, adminName, email, password } = data;
 
   const existingUser = await prisma.user.findUnique({
     where: { email },
@@ -67,12 +17,37 @@ async function registerOrganization(data) {
     throw error;
   }
 
+  const organizationCategory = await prisma.organizationCategory.findUnique({
+    where: {
+      id: categoryId,
+    },
+    select: {
+      id: true,
+      name: true,
+    },
+  });
+
+  if (!organizationCategory) {
+    const error = new Error("Selected organization category does not exist");
+    error.statusCode = 400;
+    throw error;
+  }
+
   const hashedPassword = await bcrypt.hash(password, 10);
 
   const result = await prisma.$transaction(async (tx) => {
     const organization = await tx.organization.create({
       data: {
-        name,
+        name: organizationName.trim(),
+        categoryId: organizationCategory.id,
+      },
+      include: {
+        organizationCategory: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
       },
     });
 
@@ -93,13 +68,6 @@ async function registerOrganization(data) {
 }
 
 async function login(data, context) {
-  const { isValid, errors } = validateLoginInput(data);
-  if (!isValid) {
-    const error = new Error("Invalid credentials");
-    error.statusCode = 401;
-    throw error;
-  }
-
   const { email, password } = data;
   const ipAddress = context?.ipAddress;
   const userAgent = context?.userAgent;
@@ -107,7 +75,16 @@ async function login(data, context) {
   const user = await prisma.user.findUnique({
     where: { email },
     include: {
-      organization: true,
+      organization: {
+        include: {
+          organizationCategory: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+        },
+      },
     },
   });
 

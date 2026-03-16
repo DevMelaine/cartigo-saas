@@ -22,8 +22,19 @@ const { authLimiter } = require("../middlewares/rateLimiter/authLimiter");
  *         application/json:
  *           schema:
  *             type: object
+ *             required:
+ *               - organizationName
+ *               - categoryId
+ *               - adminName
+ *               - email
+ *               - password
  *             properties:
- *               name:
+ *               organizationName:
+ *                 type: string
+ *               categoryId:
+ *                 type: string
+ *                 format: uuid
+ *               adminName:
  *                 type: string
  *               email:
  *                 type: string
@@ -38,7 +49,66 @@ router.post(
   authLimiter,
   authController.registerOrganization
 );
+
+/**
+ * @swagger
+ * /api/auth/login:
+ *   post:
+ *     tags: [Auth]
+ *     summary: Log in an organization user
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - email
+ *               - password
+ *             properties:
+ *               email:
+ *                 type: string
+ *                 format: email
+ *               password:
+ *                 type: string
+ *                 format: password
+ *     responses:
+ *       200:
+ *         description: Login successful
+ *       400:
+ *         description: Validation failed
+ *       401:
+ *         description: Invalid credentials
+ *       423:
+ *         description: Account temporarily locked
+ */
 router.post("/login", authLimiter, authController.login);
+
+/**
+ * @swagger
+ * /api/auth/refresh-token:
+ *   post:
+ *     tags: [Auth]
+ *     summary: Rotate a user refresh token
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - refreshToken
+ *             properties:
+ *               refreshToken:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Refresh token rotated successfully
+ *       400:
+ *         description: Validation failed
+ *       401:
+ *         description: Invalid refresh token
+ */
 router.post("/refresh-token", authController.refreshToken);
 
 module.exports = router;

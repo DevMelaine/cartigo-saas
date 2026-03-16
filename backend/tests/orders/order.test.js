@@ -1,6 +1,7 @@
 const request = require("supertest");
 const app = require("../../src/app");
 const { PrismaClient } = require("@prisma/client");
+const { createOrganizationForTest } = require("../helpers/organizationCategoryHelper");
 
 const prisma = global.prisma || new PrismaClient();
 
@@ -33,8 +34,8 @@ beforeEach(async () => {
   customerToken = res.body.data.accessToken;
   customerId = res.body.data.customer.id;
 
-  const organization = await prisma.organization.create({
-    data: { name: "Test Org" }
+  const organization = await createOrganizationForTest({
+    name: "Test Org",
   });
 
   organizationId = organization.id;

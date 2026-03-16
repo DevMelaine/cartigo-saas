@@ -1,6 +1,6 @@
 const request = require("supertest");
 const app = require("../../src/app");
-const { seedTestUser } = require("../seed");
+const { ensureOrganizationCategory } = require("../helpers/organizationCategoryHelper");
 
 /**
  * These tests verify the organization registration endpoint.
@@ -10,10 +10,13 @@ const { seedTestUser } = require("../seed");
 
 describe("POST /api/auth/register-organization", () => {
   it("should create organization and admin user successfully", async () => {
+    const category = await ensureOrganizationCategory({ name: "Boutique" });
+
     const res = await request(app)
       .post("/api/auth/register-organization")
       .send({
-        name: "Test Org",
+        organizationName: "Test Org",
+        categoryId: category.id,
         adminName: "Admin User",
         email: "admin@test.com",
         password: "password123",
@@ -33,10 +36,13 @@ describe("POST /api/auth/register-organization", () => {
   });
 
   it("should return JWT access token in correct format", async () => {
+    const category = await ensureOrganizationCategory({ name: "Restaurant" });
+
     const res = await request(app)
       .post("/api/auth/register-organization")
       .send({
-        name: "Org2",
+        organizationName: "Org2",
+        categoryId: category.id,
         adminName: "Admin2",
         email: "admin2@test.com",
         password: "password123",
@@ -49,11 +55,14 @@ describe("POST /api/auth/register-organization", () => {
   });
 
   it("should fail if email already exists", async () => {
+    const category = await ensureOrganizationCategory({ name: "Pharmacie" });
+
     // create first organization
     await request(app)
       .post("/api/auth/register-organization")
       .send({
-        name: "Org3",
+        organizationName: "Org3",
+        categoryId: category.id,
         adminName: "Admin3",
         email: "duplicate@test.com",
         password: "password123",
@@ -63,7 +72,8 @@ describe("POST /api/auth/register-organization", () => {
     const res = await request(app)
       .post("/api/auth/register-organization")
       .send({
-        name: "Org4",
+        organizationName: "Org4",
+        categoryId: category.id,
         adminName: "Admin4",
         email: "duplicate@test.com",
         password: "password456",
@@ -78,7 +88,7 @@ describe("POST /api/auth/register-organization", () => {
     const res = await request(app)
       .post("/api/auth/register-organization")
       .send({
-        name: "",
+        organizationName: "",
         adminName: "",
         email: "bad",
       })
@@ -87,5 +97,21 @@ describe("POST /api/auth/register-organization", () => {
     expect(res.body.success).toBe(false);
     expect(Array.isArray(res.body.errors)).toBe(true);
     expect(res.body.errors.length).toBeGreaterThan(0);
+  });
+
+  it("should fail when categoryId does not exist", async () => {
+    const res = await request(app)
+      .post("/api/auth/register-organization")
+      .send({
+        organizationName: "No Category Org",
+        categoryId: "00000000-0000-0000-0000-000000000000",
+        adminName: "Admin User",
+        email: "nocategory@test.com",
+        password: "password123",
+      })
+      .expect(400);
+
+    expect(res.body.success).toBe(false);
+    expect(res.body.message).toMatch(/category/i);
   });
 });

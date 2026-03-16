@@ -1,11 +1,14 @@
 const request = require("supertest");
 const app = require("../../src/app");
-const { seedTestUser } = require("../seed");
+const { ensureOrganizationCategory } = require("../helpers/organizationCategoryHelper");
 
 // helper that registers a user using the public endpoint
 async function registerAdmin(email = "login@test.com") {
+  const category = await ensureOrganizationCategory({ name: "Boutique" });
+
   await request(app).post("/api/auth/register-organization").send({
-    name: "Login Org",
+    organizationName: "Login Org",
+    categoryId: category.id,
     adminName: "Login Admin",
     email,
     password: "password123",

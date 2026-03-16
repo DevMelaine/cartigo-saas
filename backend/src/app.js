@@ -11,6 +11,8 @@ const categoryRoutes = require("./routes/categoryRoutes");
 const inventoryRoutes = require("./routes/inventoryRoutes");
 const paymentRoutes = require("./routes/payment.routes");
 const notificationRoutes = require("./routes/notification.routes");
+const organizationCategoryRoutes = require("./routes/organizationCategory.routes");
+const publicRoutes = require("./routes/public.routes");
 const securityMiddleware = require("./middlewares/securityMiddleware");
 const swaggerUi = require("swagger-ui-express");
 const swaggerSpec = require("./swagger");
@@ -33,6 +35,8 @@ app.use("/api/cart", cartRoutes);
 app.use("/api/orders", orderRoutes);
 app.use("/api/payments", paymentRoutes);
 app.use("/api/notifications", notificationRoutes);
+app.use("/api/organization-categories", organizationCategoryRoutes);
+app.use("/api/public", publicRoutes);
 
 app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 

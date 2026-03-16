@@ -1,6 +1,7 @@
 const request = require("supertest");
 const app = require("../../src/app");
 const { PrismaClient } = require("@prisma/client");
+const { createOrganizationForTest } = require("../helpers/organizationCategoryHelper");
 
 const prisma = global.prisma || new PrismaClient();
 const originalFetch = global.fetch;
@@ -32,10 +33,8 @@ async function registerCustomer(prefix = "payment-customer") {
 async function seedPayableOrder() {
   const session = await registerCustomer();
 
-  const organization = await prisma.organization.create({
-    data: {
-      name: `Payment Org ${Date.now()}`,
-    },
+  const organization = await createOrganizationForTest({
+    name: `Payment Org ${Date.now()}`,
   });
 
   const product = await prisma.product.create({

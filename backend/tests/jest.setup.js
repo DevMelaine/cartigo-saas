@@ -20,6 +20,7 @@ afterEach(async () => {
     "Inventory",
     "Product",
     "Category",
+    "OrganizationCategory",
     "RefreshToken",
     "CustomerRefreshToken",
     "RefreshCustomerToken",

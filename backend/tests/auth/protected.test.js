@@ -1,12 +1,15 @@
 const request = require("supertest");
 const app = require("../../src/app");
-const { seedTestUser } = require("../seed");
+const { ensureOrganizationCategory } = require("../helpers/organizationCategoryHelper");
 
 // helper to register, login and return access token
 async function createAndLogin() {
   const email = `prot${Date.now()}@test.com`;
+  const category = await ensureOrganizationCategory({ name: "Boutique" });
+
   await request(app).post("/api/auth/register-organization").send({
-    name: "Prot Org",
+    organizationName: "Prot Org",
+    categoryId: category.id,
     adminName: "Prot Admin",
     email,
     password: "password123",
