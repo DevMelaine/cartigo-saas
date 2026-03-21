@@ -22,8 +22,19 @@ const { authLimiter } = require("../middlewares/rateLimiter/authLimiter");
  *         application/json:
  *           schema:
  *             type: object
+ *             required:
+ *               - organizationName
+ *               - categoryId
+ *               - adminName
+ *               - email
+ *               - password
  *             properties:
- *               name:
+ *               organizationName:
+ *                 type: string
+ *               categoryId:
+ *                 type: string
+ *                 format: uuid
+ *               adminName:
  *                 type: string
  *               email:
  *                 type: string

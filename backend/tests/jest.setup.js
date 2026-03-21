@@ -26,7 +26,8 @@ afterEach(async () => {
     "CustomerAuditLog",
     "User",
     "Customer",
-    "Organization"
+    "Organization",
+    "OrganizationCategory"
   ];
 
   for (const table of tables) {

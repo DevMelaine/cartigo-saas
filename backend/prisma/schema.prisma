@@ -13,12 +13,22 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+model OrganizationCategory {
+  id        String         @id @default(uuid())
+  name      String         @unique
+  createdAt DateTime       @default(now())
+
+  organizations Organization[]
+}
+
 model Organization {
   id        String   @id @default(uuid())
   name      String
   address   String?
+  categoryId String
   createdAt DateTime @default(now())
 
+  category      OrganizationCategory @relation(fields: [categoryId], references: [id], onDelete: Restrict)
   users         User[]
   products      Product[]
   orders        Order[]
@@ -26,6 +36,8 @@ model Organization {
   inventories   Inventory[]
   deliveryJobs  DeliveryJob[]
   notifications Notification[]
+
+  @@index([categoryId])
 }
 
 model User {

@@ -1,29 +1,49 @@
-/**
- * Below are the colors that are used in the app. The colors are defined in the light and dark mode.
- * There are many other ways to style your app. For example, [Nativewind](https://www.nativewind.dev/), [Tamagui](https://tamagui.dev/), [unistyles](https://reactnativeunistyles.vercel.app), etc.
- */
-
 import { Platform } from 'react-native';
 
-const tintColorLight = '#0a7ea4';
-const tintColorDark = '#fff';
+const charcoal = '#111111';
+const slate = '#6B7280';
+const line = '#E5E7EB';
+const mist = '#F6F7F9';
+const emerald = '#18A957';
+const emeraldDeep = '#128246';
+const midnight = '#0F172A';
 
 export const Colors = {
   light: {
-    text: '#11181C',
-    background: '#fff',
-    tint: tintColorLight,
-    icon: '#687076',
-    tabIconDefault: '#687076',
-    tabIconSelected: tintColorLight,
+    text: charcoal,
+    background: '#FFFFFF',
+    surface: '#FFFFFF',
+    surfaceMuted: mist,
+    tint: charcoal,
+    accent: emerald,
+    accentStrong: emeraldDeep,
+    icon: slate,
+    border: line,
+    success: emeraldDeep,
+    danger: '#D92D20',
+    tabIconDefault: '#98A2B3',
+    tabIconSelected: charcoal,
+    tabBarBackground: '#FFFFFF',
+    heroStart: '#FFFFFF',
+    heroEnd: mist,
   },
   dark: {
-    text: '#ECEDEE',
-    background: '#151718',
-    tint: tintColorDark,
-    icon: '#9BA1A6',
-    tabIconDefault: '#9BA1A6',
-    tabIconSelected: tintColorDark,
+    text: '#F8FAFC',
+    background: midnight,
+    surface: '#172033',
+    surfaceMuted: '#22314A',
+    tint: emerald,
+    accent: emerald,
+    accentStrong: '#FF8B3D',
+    icon: '#94A3B8',
+    border: '#31425F',
+    success: '#36C06B',
+    danger: '#F97066',
+    tabIconDefault: '#64748B',
+    tabIconSelected: emerald,
+    tabBarBackground: '#111827',
+    heroStart: '#1A2236',
+    heroEnd: '#22314A',
   },
 };
 
@@ -45,9 +65,9 @@ export const Fonts = Platform.select({
     mono: 'monospace',
   },
   web: {
-    sans: "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif",
+    sans: "'Avenir Next', 'Segoe UI', Helvetica, Arial, sans-serif",
     serif: "Georgia, 'Times New Roman', serif",
-    rounded: "'SF Pro Rounded', 'Hiragino Maru Gothic ProN', Meiryo, 'MS PGothic', sans-serif",
-    mono: "SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace",
+    rounded: "'Avenir Next Rounded', 'Segoe UI', sans-serif",
+    mono: "SFMono-Regular, Menlo, Monaco, Consolas, 'Courier New', monospace",
   },
 });

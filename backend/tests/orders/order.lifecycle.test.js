@@ -3,6 +3,7 @@ const jwt = require("jsonwebtoken");
 const { randomUUID } = require("crypto");
 const { PrismaClient } = require("@prisma/client");
 const app = require("../../src/app");
+const { createTestOrganization } = require("../helpers/organizationCategoryHelper");
 
 const prisma = global.prisma || new PrismaClient();
 
@@ -30,10 +31,8 @@ function signOrgUserToken({ organizationId, role, userId = randomUUID() }) {
 }
 
 async function createOrganizationCustomer(name) {
-  const organization = await prisma.organization.create({
-    data: {
-      name,
-    },
+  const organization = await createTestOrganization({
+    name,
   });
 
   const customer = await prisma.customer.create({

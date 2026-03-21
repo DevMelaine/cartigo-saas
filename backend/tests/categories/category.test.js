@@ -1,11 +1,17 @@
 const request = require("supertest");
 const app = require("../../src/app");
+const {
+  ensureOrganizationCategory,
+} = require("../helpers/organizationCategoryHelper");
 
 async function setupTestOrg() {
+  const organizationCategory = await ensureOrganizationCategory();
+
   const registerRes = await request(app)
     .post("/api/auth/register-organization")
     .send({
       name: `Test Org Categories ${Date.now()}`,
+      categoryId: organizationCategory.id,
       adminName: "Test Admin",
       email: `test-cat-org-${Date.now()}@test.com`,
       password: "password123",

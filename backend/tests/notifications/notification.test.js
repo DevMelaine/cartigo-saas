@@ -5,6 +5,7 @@ const { PrismaClient } = require("@prisma/client");
 const app = require("../../src/app");
 const notificationService = require("../../src/services/notification.service");
 const { NOTIFICATION_TYPES } = require("../../src/utils/notificationEvents");
+const { createTestOrganization } = require("../helpers/organizationCategoryHelper");
 
 const prisma = global.prisma || new PrismaClient();
 
@@ -38,10 +39,8 @@ function signCustomerToken(customer, organizationId = null) {
 }
 
 async function seedNotificationActors() {
-  const organization = await prisma.organization.create({
-    data: {
-      name: `Notifications Org ${Date.now()}`,
-    },
+  const organization = await createTestOrganization({
+    name: `Notifications Org ${Date.now()}`,
   });
 
   const [admin, manager, cashier, staff] = await Promise.all([

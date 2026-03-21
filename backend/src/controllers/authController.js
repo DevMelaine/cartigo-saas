@@ -16,6 +16,13 @@ async function registerOrganization(req, res) {
         organization: {
           id: organization.id,
           name: organization.name,
+          categoryId: organization.categoryId,
+          category: organization.category
+            ? {
+                id: organization.category.id,
+                name: organization.category.name,
+              }
+            : null,
           createdAt: organization.createdAt,
         },
         user: {
@@ -69,6 +76,13 @@ async function login(req, res) {
           ? {
               id: user.organization.id,
               name: user.organization.name,
+              categoryId: user.organization.categoryId,
+              category: user.organization.category
+                ? {
+                    id: user.organization.category.id,
+                    name: user.organization.category.name,
+                  }
+                : null,
               createdAt: user.organization.createdAt,
             }
           : null,

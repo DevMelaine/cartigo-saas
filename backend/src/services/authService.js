@@ -1,61 +1,28 @@
 const bcrypt = require("bcrypt");
 const { PrismaClient } = require("@prisma/client");
+const { loginSchema, registerOrganizationSchema } = require("../validators/auth.validator");
 
 // share prisma instance when available (tests set global.prisma)
 const prisma = global.prisma || new PrismaClient();
 
-function validateRegisterOrganizationInput(body) {
-  const errors = [];
-
-  if (!body.name || typeof body.name !== "string") {
-    errors.push("Organization name is required.");
-  }
-  if (!body.adminName || typeof body.adminName !== "string") {
-    errors.push("Admin name is required.");
-  }
-  if (!body.email || typeof body.email !== "string") {
-    errors.push("Email is required.");
-  } else if (!/^\S+@\S+\.\S+$/.test(body.email)) {
-    errors.push("Email is invalid.");
-  }
-  if (!body.password || typeof body.password !== "string") {
-    errors.push("Password is required.");
-  } else if (body.password.length < 8) {
-    errors.push("Password must be at least 8 characters.");
-  }
-
-  return {
-    isValid: errors.length === 0,
-    errors,
-  };
-}
-
-function validateLoginInput(body) {
-  const errors = [];
-
-  if (!body.email || typeof body.email !== "string") {
-    errors.push("Email is required.");
-  }
-  if (!body.password || typeof body.password !== "string") {
-    errors.push("Password is required.");
-  }
-
-  return {
-    isValid: errors.length === 0,
-    errors,
-  };
-}
-
 async function registerOrganization(data) {
-  const { isValid, errors } = validateRegisterOrganizationInput(data);
-  if (!isValid) {
-    const error = new Error("Validation failed");
-    error.statusCode = 400;
-    error.details = errors;
-    throw error;
+  const validation = registerOrganizationSchema.validate(data, {
+    abortEarly: false,
+    stripUnknown: true,
+  });
+
+  if (validation.error) {
+    const validationError = new Error("Validation failed");
+    validationError.statusCode = 400;
+    validationError.details = validation.error.details.map((detail) => detail.message);
+    throw validationError;
   }
 
-  const { name, adminName, email, password } = data;
+  const { value } = validation;
+  const organizationName = (value.organizationName || value.name).trim();
+  const adminName = value.adminName.trim();
+  const email = value.email.trim().toLowerCase();
+  const { password, categoryId } = value;
 
   const existingUser = await prisma.user.findUnique({
     where: { email },
@@ -67,12 +34,26 @@ async function registerOrganization(data) {
     throw error;
   }
 
+  const organizationCategory = await prisma.organizationCategory.findUnique({
+    where: { id: categoryId },
+  });
+
+  if (!organizationCategory) {
+    const error = new Error("Invalid organization category");
+    error.statusCode = 400;
+    throw error;
+  }
+
   const hashedPassword = await bcrypt.hash(password, 10);
 
   const result = await prisma.$transaction(async (tx) => {
     const organization = await tx.organization.create({
       data: {
-        name,
+        name: organizationName,
+        categoryId: organizationCategory.id,
+      },
+      include: {
+        category: true,
       },
     });
 
@@ -93,21 +74,31 @@ async function registerOrganization(data) {
 }
 
 async function login(data, context) {
-  const { isValid, errors } = validateLoginInput(data);
-  if (!isValid) {
-    const error = new Error("Invalid credentials");
-    error.statusCode = 401;
-    throw error;
+  const validation = loginSchema.validate(data, {
+    abortEarly: false,
+    stripUnknown: true,
+  });
+
+  if (validation.error) {
+    const authError = new Error("Invalid credentials");
+    authError.statusCode = 401;
+    throw authError;
   }
 
-  const { email, password } = data;
+  const { value } = validation;
+  const email = value.email.trim().toLowerCase();
+  const { password } = value;
   const ipAddress = context?.ipAddress;
   const userAgent = context?.userAgent;
 
   const user = await prisma.user.findUnique({
     where: { email },
     include: {
-      organization: true,
+      organization: {
+        include: {
+          category: true,
+        },
+      },
     },
   });
 
