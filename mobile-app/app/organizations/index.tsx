@@ -170,7 +170,9 @@ export default function OrganizationsScreen() {
           accessibilityRole="button"
           onPress={handleLoadMore}
           style={[styles.loadMoreButton, { backgroundColor: palette.tint }]}>
-          <Text style={styles.loadMoreText}>{loadingMore ? 'Loading...' : 'Load more organizations'}</Text>
+          <Text style={[styles.loadMoreText, { color: palette.onTint }]}>
+            {loadingMore ? 'Loading...' : 'Load more organizations'}
+          </Text>
         </Pressable>
       ) : null}
     </ScreenShell>
@@ -238,7 +240,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   loadMoreText: {
-    color: '#FFFFFF',
     fontSize: 15,
     fontWeight: '700',
   },

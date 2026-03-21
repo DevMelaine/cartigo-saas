@@ -6,11 +6,39 @@ import { ScreenShell } from '@/components/screen-shell';
 import { Colors, Fonts } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useCustomerSession } from '@/providers/customer-session-provider';
+import { type ThemePreference, useThemePreference } from '@/providers/theme-preference-provider';
 
 export default function AccountScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const palette = Colors[colorScheme];
   const { customer, isAuthenticated, isHydrating, isSubmitting, logout } = useCustomerSession();
+  const themePreference = useThemePreference();
+
+  function renderThemeOption(label: string, value: ThemePreference) {
+    const isActive = themePreference.preference === value;
+
+    return (
+      <Pressable
+        key={value}
+        accessibilityRole="button"
+        onPress={() => themePreference.setPreference(value)}
+        style={[
+          styles.themeOption,
+          {
+            backgroundColor: isActive ? palette.text : palette.surface,
+            borderColor: isActive ? palette.text : palette.border,
+          },
+        ]}>
+        <Text
+          style={[
+            styles.themeOptionText,
+            { color: isActive ? palette.inverseText : palette.text },
+          ]}>
+          {label}
+        </Text>
+      </Pressable>
+    );
+  }
 
   if (isHydrating) {
     return (
@@ -50,11 +78,26 @@ export default function AccountScreen() {
         ) : null}
       </View>
 
+      <View style={[styles.preferenceCard, { backgroundColor: palette.surface, borderColor: palette.border }]}>
+        <View style={styles.preferenceHeader}>
+          <Text style={[styles.preferenceTitle, { color: palette.text }]}>Apparence</Text>
+          <Text style={[styles.preferenceBody, { color: palette.icon }]}>
+            Choisis entre clair, nuit ou le mode systeme.
+          </Text>
+        </View>
+
+        <View style={[styles.themeOptions, { backgroundColor: palette.surfaceMuted }]}>
+          {renderThemeOption('Clair', 'light')}
+          {renderThemeOption('Nuit', 'dark')}
+          {renderThemeOption('Systeme', 'system')}
+        </View>
+      </View>
+
       {isAuthenticated ? (
         <View style={styles.actions}>
           <Link href="/(tabs)/cart" asChild>
             <Pressable style={[styles.primaryAction, { backgroundColor: palette.tint }]}>
-              <Text style={styles.primaryActionText}>Open cart</Text>
+              <Text style={[styles.primaryActionText, { color: palette.onTint }]}>Open cart</Text>
             </Pressable>
           </Link>
           <Link href="/orders" asChild>
@@ -67,7 +110,7 @@ export default function AccountScreen() {
         <View style={styles.actions}>
           <Link href="/login" asChild>
             <Pressable style={[styles.primaryAction, { backgroundColor: palette.tint }]}>
-              <Text style={styles.primaryActionText}>Sign in</Text>
+              <Text style={[styles.primaryActionText, { color: palette.onTint }]}>Sign in</Text>
             </Pressable>
           </Link>
           <Link href="/register" asChild>
@@ -132,6 +175,42 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '700',
   },
+  preferenceCard: {
+    borderRadius: 24,
+    borderWidth: 1,
+    padding: 18,
+    gap: 14,
+  },
+  preferenceHeader: {
+    gap: 4,
+  },
+  preferenceTitle: {
+    fontFamily: Fonts.rounded,
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  preferenceBody: {
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  themeOptions: {
+    borderRadius: 18,
+    padding: 6,
+    flexDirection: 'row',
+    gap: 6,
+  },
+  themeOption: {
+    flex: 1,
+    minHeight: 42,
+    borderRadius: 14,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  themeOptionText: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
   actions: {
     flexDirection: 'row',
     gap: 10,
@@ -143,7 +222,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   primaryActionText: {
-    color: '#FFFFFF',
     fontSize: 15,
     fontWeight: '700',
   },

@@ -14,16 +14,20 @@ import {
   CustomerSessionProvider,
   useCustomerSession,
 } from '@/providers/customer-session-provider';
+import { ThemePreferenceProvider } from '@/providers/theme-preference-provider';
 
 export const unstable_settings = {
   anchor: '(tabs)',
 };
 
 function AuthGateSplash() {
+  const colorScheme = useColorScheme() ?? 'light';
+  const palette = Colors[colorScheme];
+
   return (
-    <View style={styles.splash}>
-      <ActivityIndicator color="#000000" size="small" />
-      <Text style={styles.splashText}>Chargement de Cartigo...</Text>
+    <View style={[styles.splash, { backgroundColor: palette.background }]}>
+      <ActivityIndicator color={palette.text} size="small" />
+      <Text style={[styles.splashText, { color: palette.text }]}>Chargement de Cartigo...</Text>
     </View>
   );
 }
@@ -39,7 +43,7 @@ function RootNavigator() {
 
   const firstSegment = segments[0];
   const inAuthGroup = firstSegment === '(auth)';
-  const isIndexRoute = segments.length === 0 || firstSegment === 'index';
+  const isIndexRoute = segments.join('/') === '';
 
   useEffect(() => {
     let active = true;
@@ -113,7 +117,7 @@ function RootNavigator() {
   );
 }
 
-export default function RootLayout() {
+function AppShell() {
   const colorScheme = useColorScheme() ?? 'light';
   const palette = Colors[colorScheme];
   const navigationTheme = colorScheme === 'dark' ? DarkTheme : DefaultTheme;
@@ -141,16 +145,22 @@ export default function RootLayout() {
   );
 }
 
+export default function RootLayout() {
+  return (
+    <ThemePreferenceProvider>
+      <AppShell />
+    </ThemePreferenceProvider>
+  );
+}
+
 const styles = StyleSheet.create({
   splash: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#FFFFFF',
     gap: 12,
   },
   splashText: {
     fontSize: 15,
-    color: '#111111',
   },
 });

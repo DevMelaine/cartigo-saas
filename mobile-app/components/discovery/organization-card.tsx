@@ -14,19 +14,6 @@ type OrganizationCardProps = {
   style?: StyleProp<ViewStyle>;
 };
 
-const cardShadow = Platform.select({
-  web: {
-    boxShadow: '0px 10px 24px rgba(17, 24, 39, 0.08)',
-  },
-  default: {
-    shadowColor: '#111827',
-    shadowOpacity: 0.08,
-    shadowOffset: { width: 0, height: 8 },
-    shadowRadius: 16,
-    elevation: 4,
-  },
-});
-
 export function OrganizationCard({
   name,
   category,
@@ -37,6 +24,18 @@ export function OrganizationCard({
 }: OrganizationCardProps) {
   const colorScheme = useColorScheme() ?? 'light';
   const palette = Colors[colorScheme];
+  const cardShadow = Platform.select({
+    web: {
+      boxShadow: `0px 10px 24px ${palette.shadow}`,
+    },
+    default: {
+      shadowColor: palette.text,
+      shadowOpacity: colorScheme === 'dark' ? 0.18 : 0.08,
+      shadowOffset: { width: 0, height: 8 },
+      shadowRadius: 16,
+      elevation: 4,
+    },
+  });
 
   const subtitle = description?.trim() || 'Organisation locale disponible sur Cartigo.';
 
@@ -47,19 +46,26 @@ export function OrganizationCard({
       style={[
         styles.card,
         {
-          backgroundColor: '#FFFFFF',
-          borderColor: '#EEF1F4',
+          backgroundColor: palette.surface,
+          borderColor: palette.border,
         },
         cardShadow,
         style,
       ]}>
-      <View style={[styles.media, { backgroundColor: '#EEF6F1' }]}>
+      <View style={[styles.media, { backgroundColor: palette.surfaceSoft }]}>
         {logo ? (
           <Image contentFit="cover" source={{ uri: logo }} style={StyleSheet.absoluteFillObject} transition={120} />
         ) : (
           <View style={styles.placeholder}>
-            <View style={styles.placeholderGlow} />
-            <View style={styles.placeholderBadge}>
+            <View style={[styles.placeholderGlow, { backgroundColor: palette.placeholderGlow }]} />
+            <View
+              style={[
+                styles.placeholderBadge,
+                {
+                  backgroundColor: palette.surface,
+                  borderColor: palette.border,
+                },
+              ]}>
               <MaterialIcons name="storefront" size={30} color={palette.text} />
             </View>
           </View>
@@ -71,18 +77,18 @@ export function OrganizationCard({
           {name}
         </Text>
 
-        <Text numberOfLines={3} style={[styles.description, { color: '#111111' }]}>
+        <Text numberOfLines={3} style={[styles.description, { color: palette.text }]}>
           {subtitle}
         </Text>
 
         {category ? (
           <View style={styles.footerRow}>
-            <View style={[styles.categoryBadge, { backgroundColor: '#E8F5EC' }]}>
+            <View style={[styles.categoryBadge, { backgroundColor: palette.successSurface }]}>
               <Text numberOfLines={1} style={[styles.categoryLabel, { color: palette.accentStrong }]}>
                 {category}
               </Text>
             </View>
-            <MaterialIcons name="chevron-right" size={18} color="#111111" />
+            <MaterialIcons name="chevron-right" size={18} color={palette.text} />
           </View>
         ) : null}
       </View>
@@ -111,15 +117,12 @@ const styles = StyleSheet.create({
     width: 112,
     height: 112,
     borderRadius: 56,
-    backgroundColor: 'rgba(255,255,255,0.55)',
   },
   placeholderBadge: {
     width: 60,
     height: 60,
     borderRadius: 18,
-    backgroundColor: '#FFFFFF',
     borderWidth: 1,
-    borderColor: '#E8EBF0',
     alignItems: 'center',
     justifyContent: 'center',
   },

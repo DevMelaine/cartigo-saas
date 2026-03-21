@@ -4,6 +4,7 @@ import type {
   OrganizationCategory,
   PaginatedResponse,
   PublicOrganization,
+  PublicOrganizationDetails,
   PublicProduct,
   PublicProductDetails,
 } from '@/types/public';
@@ -46,6 +47,10 @@ export const publicService = {
     });
 
     return apiClient.get<PaginatedResponse<PublicOrganization>>(`/public/organizations${query}`);
+  },
+
+  getOrganization(organizationId: string) {
+    return apiClient.get<PublicOrganizationDetails>(`/public/organizations/${organizationId}`);
   },
 
   listOrganizationProducts(organizationId: string, filters: ProductFilters = {}) {

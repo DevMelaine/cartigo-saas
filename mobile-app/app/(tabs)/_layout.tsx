@@ -15,7 +15,14 @@ export default function TabLayout() {
 
   function renderTabIcon(name: React.ComponentProps<typeof MaterialIcons>['name'], color: string) {
     return (
-      <View style={styles.iconShell}>
+      <View
+        style={[
+          styles.iconShell,
+          {
+            borderColor: palette.surfaceSoft,
+            backgroundColor: palette.surfaceSoft,
+          },
+        ]}>
         <MaterialIcons size={22} name={name} color={color} />
       </View>
     );
@@ -34,7 +41,7 @@ export default function TabLayout() {
         },
         tabBarStyle: {
           backgroundColor: palette.tabBarBackground,
-          borderTopColor: '#F3F4F6',
+          borderTopColor: palette.border,
           height: 78,
           paddingBottom: 8,
           paddingTop: 10,
@@ -45,8 +52,8 @@ export default function TabLayout() {
           paddingVertical: 2,
         },
         tabBarBadgeStyle: {
-          backgroundColor: '#111111',
-          color: '#FFFFFF',
+          backgroundColor: palette.text,
+          color: palette.inverseText,
         },
       }}>
       <Tabs.Screen
@@ -81,8 +88,6 @@ const styles = StyleSheet.create({
     height: 44,
     borderRadius: 22,
     borderWidth: 1,
-    borderColor: '#F3F4F6',
-    backgroundColor: '#F3F4F6',
     alignItems: 'center',
     justifyContent: 'center',
   },

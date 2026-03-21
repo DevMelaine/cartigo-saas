@@ -11,13 +11,32 @@ CREATE UNIQUE INDEX IF NOT EXISTS "OrganizationCategory_name_key" ON "Organizati
 ALTER TABLE "Organization"
 ADD COLUMN IF NOT EXISTS "categoryId" TEXT;
 
-INSERT INTO "OrganizationCategory" ("id", "name")
-VALUES
-    ('0d1534fb-c161-4265-93b5-52fe0f77a790', 'Restaurant'),
-    ('2d49f84e-2ccf-4d5d-b411-f9131023440e', 'Supermarket'),
-    ('910470bb-d6a9-4357-ae43-c15f54d4a3cf', 'Pharmacy'),
-    ('4d0b2661-dbc0-4d49-80ae-364421eed47d', 'Boutique')
-ON CONFLICT ("name") DO NOTHING;
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'OrganizationCategory'
+      AND column_name = 'updatedAt'
+  ) THEN
+    INSERT INTO "OrganizationCategory" ("id", "name", "createdAt", "updatedAt")
+    VALUES
+        ('0d1534fb-c161-4265-93b5-52fe0f77a790', 'Restaurant', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+        ('2d49f84e-2ccf-4d5d-b411-f9131023440e', 'Supermarket', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+        ('910470bb-d6a9-4357-ae43-c15f54d4a3cf', 'Pharmacy', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+        ('4d0b2661-dbc0-4d49-80ae-364421eed47d', 'Boutique', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+    ON CONFLICT ("name") DO NOTHING;
+  ELSE
+    INSERT INTO "OrganizationCategory" ("id", "name")
+    VALUES
+        ('0d1534fb-c161-4265-93b5-52fe0f77a790', 'Restaurant'),
+        ('2d49f84e-2ccf-4d5d-b411-f9131023440e', 'Supermarket'),
+        ('910470bb-d6a9-4357-ae43-c15f54d4a3cf', 'Pharmacy'),
+        ('4d0b2661-dbc0-4d49-80ae-364421eed47d', 'Boutique')
+    ON CONFLICT ("name") DO NOTHING;
+  END IF;
+END $$;
 
 WITH fallback AS (
     SELECT "id"

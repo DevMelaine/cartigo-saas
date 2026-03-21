@@ -180,24 +180,30 @@ export default function ProductDetailsScreen() {
                 accessibilityRole="button"
                 disabled={addingToCart || product.quantity <= 0}
                 onPress={handleAddToCart}
-                style={[
-                  styles.primaryAction,
-                  {
-                    backgroundColor: product.quantity > 0 ? palette.tint : palette.border,
-                    opacity: addingToCart ? 0.7 : 1,
-                  },
-                ]}>
-                <Text style={styles.primaryActionText}>
-                  {addingToCart ? 'Adding...' : product.quantity > 0 ? 'Add to cart' : 'Unavailable'}
-                </Text>
-              </Pressable>
-            ) : (
-              <Link href="/login" asChild>
-                <Pressable style={[styles.primaryAction, { backgroundColor: palette.tint }]}>
-                  <Text style={styles.primaryActionText}>Sign in to add to cart</Text>
+                  style={[
+                    styles.primaryAction,
+                    {
+                      backgroundColor: product.quantity > 0 ? palette.tint : palette.border,
+                      opacity: addingToCart ? 0.7 : 1,
+                    },
+                  ]}>
+                  <Text
+                    style={[
+                      styles.primaryActionText,
+                      { color: product.quantity > 0 ? palette.onTint : palette.text },
+                    ]}>
+                    {addingToCart ? 'Adding...' : product.quantity > 0 ? 'Add to cart' : 'Unavailable'}
+                  </Text>
                 </Pressable>
-              </Link>
-            )}
+              ) : (
+                <Link href="/login" asChild>
+                  <Pressable style={[styles.primaryAction, { backgroundColor: palette.tint }]}>
+                    <Text style={[styles.primaryActionText, { color: palette.onTint }]}>
+                      Sign in to add to cart
+                    </Text>
+                  </Pressable>
+                </Link>
+              )}
 
             <Link href="/(tabs)/cart" asChild>
               <Pressable style={[styles.secondaryAction, { borderColor: palette.border }]}>
@@ -305,7 +311,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   primaryActionText: {
-    color: '#FFFFFF',
     fontSize: 15,
     fontWeight: '700',
   },

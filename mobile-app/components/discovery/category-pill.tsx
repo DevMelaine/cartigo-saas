@@ -20,11 +20,11 @@ export function CategoryPill({ label, active = false, onPress }: CategoryPillPro
       style={[
         styles.pill,
         {
-          backgroundColor: active ? '#F3F4F6' : '#FFFFFF',
-          borderColor: active ? '#F3F4F6' : '#E8EBF0',
+          backgroundColor: active ? palette.surfaceSoft : palette.surface,
+          borderColor: active ? palette.surfaceSoft : palette.border,
         },
       ]}>
-      <Text style={[styles.label, { color: active ? '#111111' : palette.text }]}>{label}</Text>
+      <Text style={[styles.label, { color: active ? palette.text : palette.text }]}>{label}</Text>
     </Pressable>
   );
 }

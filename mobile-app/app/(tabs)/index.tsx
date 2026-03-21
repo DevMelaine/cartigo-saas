@@ -390,25 +390,27 @@ export default function HomeScreen() {
     ({ section }: { section: SectionListData<OrganizationRow, DiscoverySection> }) => (
       <View style={styles.sectionHeader}>
         <Text style={[styles.sectionTitle, { color: palette.text }]}>{section.title}</Text>
-        <Text style={[styles.sectionCount, { color: palette.text }]}>
+        <Text style={[styles.sectionCount, { color: palette.icon }]}>
           {section.count} organisation{section.count > 1 ? 's' : ''}
         </Text>
       </View>
     ),
-    [palette.text]
+    [palette.icon, palette.text]
   );
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <View style={styles.topArea}>
+    <SafeAreaView style={[styles.safeArea, { backgroundColor: palette.background }]}>
+      <View style={[styles.topArea, { backgroundColor: palette.background }]}>
         <View style={styles.topBar}>
           <Text style={[styles.brand, { color: palette.accent }]}>Cartigo</Text>
 
           <Pressable accessibilityRole="button" style={styles.notificationButton}>
             <MaterialIcons name="notifications-none" size={22} color={palette.text} />
             {notificationCount > 0 ? (
-              <View style={styles.notificationBadge}>
-                <Text style={styles.notificationBadgeText}>{notificationCount}</Text>
+              <View style={[styles.notificationBadge, { backgroundColor: palette.text }]}>
+                <Text style={[styles.notificationBadgeText, { color: palette.inverseText }]}>
+                  {notificationCount}
+                </Text>
               </View>
             ) : null}
           </Pressable>
@@ -489,14 +491,12 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
   },
   topArea: {
     paddingHorizontal: 16,
     paddingTop: 6,
     paddingBottom: 10,
     gap: 16,
-    backgroundColor: '#FFFFFF',
   },
   topBar: {
     flexDirection: 'row',
@@ -522,12 +522,10 @@ const styles = StyleSheet.create({
     height: 18,
     borderRadius: 9,
     paddingHorizontal: 4,
-    backgroundColor: '#111111',
     alignItems: 'center',
     justifyContent: 'center',
   },
   notificationBadgeText: {
-    color: '#FFFFFF',
     fontSize: 10,
     fontWeight: '700',
   },
@@ -555,7 +553,6 @@ const styles = StyleSheet.create({
   },
   sectionCount: {
     fontSize: 13,
-    color: '#111111',
   },
   organizationRow: {
     flexDirection: 'row',

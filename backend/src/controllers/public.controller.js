@@ -48,6 +48,19 @@ async function listOrganizations(req, res) {
   }
 }
 
+async function getOrganization(req, res) {
+  try {
+    const params = validateOrThrow(organizationIdParamSchema, req.params);
+    const organization = await publicService.getOrganization(params.organizationId);
+    return res.status(200).json(organization);
+  } catch (error) {
+    return res.status(error.statusCode || 500).json({
+      message: error.message || "Unable to load organization",
+      errors: error.details,
+    });
+  }
+}
+
 async function listOrganizationProducts(req, res) {
   try {
     const params = validateOrThrow(organizationIdParamSchema, req.params);
@@ -81,6 +94,7 @@ async function getProduct(req, res) {
 module.exports = {
   listCategories,
   listOrganizations,
+  getOrganization,
   listOrganizationProducts,
   getProduct,
 };

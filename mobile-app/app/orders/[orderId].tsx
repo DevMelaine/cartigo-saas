@@ -184,14 +184,14 @@ export default function OrderDetailsScreen() {
                 accessibilityRole="button"
                 disabled={actionLoading}
                 onPress={handlePayNow}
-                style={[
-                  styles.primaryAction,
-                  { backgroundColor: palette.tint, opacity: actionLoading ? 0.7 : 1 },
-                ]}>
-                <Text style={styles.primaryActionText}>
-                  {actionLoading ? 'Please wait...' : 'Pay with PayGate'}
-                </Text>
-              </Pressable>
+                  style={[
+                    styles.primaryAction,
+                    { backgroundColor: palette.tint, opacity: actionLoading ? 0.7 : 1 },
+                  ]}>
+                  <Text style={[styles.primaryActionText, { color: palette.onTint }]}>
+                    {actionLoading ? 'Please wait...' : 'Pay with PayGate'}
+                  </Text>
+                </Pressable>
             ) : null}
 
             <Pressable
@@ -322,7 +322,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   primaryActionText: {
-    color: '#FFFFFF',
     fontSize: 15,
     fontWeight: '700',
   },

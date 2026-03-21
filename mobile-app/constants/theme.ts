@@ -1,49 +1,72 @@
 import { Platform } from 'react-native';
 
-const charcoal = '#111111';
-const slate = '#6B7280';
-const line = '#E5E7EB';
-const mist = '#F6F7F9';
-const emerald = '#18A957';
-const emeraldDeep = '#128246';
-const midnight = '#0F172A';
+const ink = '#111111';
+const muted = '#6B7280';
+const border = '#ECECEC';
+const soft = '#F7F7F7';
+const softStrong = '#F3F4F3';
+const brandGreen = '#06C167';
+const brandGreenDeep = '#05944E';
+const midnight = '#101214';
 
 export const Colors = {
   light: {
-    text: charcoal,
+    text: ink,
     background: '#FFFFFF',
     surface: '#FFFFFF',
-    surfaceMuted: mist,
-    tint: charcoal,
-    accent: emerald,
-    accentStrong: emeraldDeep,
-    icon: slate,
-    border: line,
-    success: emeraldDeep,
+    surfaceMuted: soft,
+    surfaceSoft: softStrong,
+    tint: brandGreen,
+    accent: brandGreen,
+    accentStrong: brandGreenDeep,
+    icon: muted,
+    border,
+    success: brandGreen,
+    successSurface: '#EAF9F0',
     danger: '#D92D20',
-    tabIconDefault: '#98A2B3',
-    tabIconSelected: charcoal,
+    dangerSurface: '#FDEEEE',
+    onTint: '#FFFFFF',
+    inverseText: '#FFFFFF',
+    tabIconDefault: '#A1A1AA',
+    tabIconSelected: ink,
     tabBarBackground: '#FFFFFF',
     heroStart: '#FFFFFF',
-    heroEnd: mist,
+    heroEnd: soft,
+    floatingSurface: 'rgba(255,255,255,0.94)',
+    backdrop: 'rgba(17,17,17,0.24)',
+    overlay: 'rgba(17,17,17,0.08)',
+    overlayStrong: 'rgba(17,17,17,0.56)',
+    placeholderGlow: 'rgba(255,255,255,0.55)',
+    shadow: 'rgba(17,17,17,0.08)',
   },
   dark: {
     text: '#F8FAFC',
     background: midnight,
-    surface: '#172033',
-    surfaceMuted: '#22314A',
-    tint: emerald,
-    accent: emerald,
-    accentStrong: '#FF8B3D',
+    surface: '#17191B',
+    surfaceMuted: '#1F2225',
+    surfaceSoft: '#25292D',
+    tint: brandGreen,
+    accent: brandGreen,
+    accentStrong: '#19D178',
     icon: '#94A3B8',
-    border: '#31425F',
-    success: '#36C06B',
+    border: '#2C3136',
+    success: '#19D178',
+    successSurface: '#11271B',
     danger: '#F97066',
-    tabIconDefault: '#64748B',
-    tabIconSelected: emerald,
-    tabBarBackground: '#111827',
-    heroStart: '#1A2236',
-    heroEnd: '#22314A',
+    dangerSurface: '#341818',
+    onTint: '#FFFFFF',
+    inverseText: '#FFFFFF',
+    tabIconDefault: '#6B7280',
+    tabIconSelected: '#FFFFFF',
+    tabBarBackground: '#101214',
+    heroStart: '#17191B',
+    heroEnd: '#1F2225',
+    floatingSurface: 'rgba(23,25,27,0.94)',
+    backdrop: 'rgba(0,0,0,0.42)',
+    overlay: 'rgba(0,0,0,0.18)',
+    overlayStrong: 'rgba(0,0,0,0.58)',
+    placeholderGlow: 'rgba(255,255,255,0.08)',
+    shadow: 'rgba(0,0,0,0.16)',
   },
 };
 

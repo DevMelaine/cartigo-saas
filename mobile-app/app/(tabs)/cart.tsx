@@ -120,12 +120,12 @@ export default function CartScreen() {
           </Text>
         </View>
 
-        <View style={styles.actions}>
-          <Link href="/login" asChild>
-            <Pressable style={[styles.primaryAction, { backgroundColor: palette.tint }]}>
-              <Text style={styles.primaryActionText}>Sign in</Text>
-            </Pressable>
-          </Link>
+          <View style={styles.actions}>
+            <Link href="/login" asChild>
+              <Pressable style={[styles.primaryAction, { backgroundColor: palette.tint }]}>
+                <Text style={[styles.primaryActionText, { color: palette.onTint }]}>Sign in</Text>
+              </Pressable>
+            </Link>
           <Link href="/register" asChild>
             <Pressable style={[styles.secondaryAction, { borderColor: palette.border }]}>
               <Text style={[styles.secondaryActionText, { color: palette.text }]}>Create account</Text>
@@ -211,14 +211,14 @@ export default function CartScreen() {
             accessibilityRole="button"
             disabled={checkoutLoading}
             onPress={handleCheckout}
-            style={[
-              styles.checkoutButton,
-              { backgroundColor: palette.tint, opacity: checkoutLoading ? 0.7 : 1 },
-            ]}>
-            <Text style={styles.checkoutButtonText}>
-              {checkoutLoading ? 'Creating order...' : 'Checkout and pay'}
-            </Text>
-          </Pressable>
+              style={[
+                styles.checkoutButton,
+                { backgroundColor: palette.tint, opacity: checkoutLoading ? 0.7 : 1 },
+              ]}>
+              <Text style={[styles.checkoutButtonText, { color: palette.onTint }]}>
+                {checkoutLoading ? 'Creating order...' : 'Checkout and pay'}
+              </Text>
+            </Pressable>
         </>
       ) : null}
 
@@ -262,7 +262,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   primaryActionText: {
-    color: '#FFFFFF',
     fontSize: 15,
     fontWeight: '700',
   },
@@ -350,7 +349,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   checkoutButtonText: {
-    color: '#FFFFFF',
     fontSize: 15,
     fontWeight: '700',
   },

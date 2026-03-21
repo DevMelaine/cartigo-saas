@@ -22,11 +22,15 @@ model OrganizationCategory {
 }
 
 model Organization {
-  id        String   @id @default(uuid())
-  name      String
-  address   String?
-  categoryId String
-  createdAt DateTime @default(now())
+  id            String   @id @default(uuid())
+  name          String
+  address       String?
+  description   String?
+  logoUrl       String?
+  coverImageUrl String?
+  openingHours  Json?
+  categoryId    String
+  createdAt     DateTime @default(now())
 
   category      OrganizationCategory @relation(fields: [categoryId], references: [id], onDelete: Restrict)
   users         User[]

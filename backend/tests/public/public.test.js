@@ -29,6 +29,7 @@ describe("Public discovery endpoints", () => {
       name: "Chez Cartigo",
       categoryName: restaurantCategory.name,
       address: "Downtown",
+      description: "Cuisine locale et rapide",
     });
     await createTestOrganization({
       name: "Green Pharmacy",
@@ -50,7 +51,7 @@ describe("Public discovery endpoints", () => {
       name: "Chez Cartigo",
       categoryId: restaurantCategory.id,
       category: restaurantCategory.name,
-      description: "Downtown",
+      description: "Cuisine locale et rapide",
     });
   });
 
@@ -61,5 +62,125 @@ describe("Public discovery endpoints", () => {
       .expect(404);
 
     expect(response.body.message).toMatch(/organization category not found/i);
+  });
+
+  it("returns organization details with real profile fields and grouped product categories", async () => {
+    const organizationCategory = await ensureOrganizationCategory("Restaurant");
+    const organization = await createTestOrganization({
+      name: "Maison Cartigo",
+      categoryName: organizationCategory.name,
+      address: "Rue de Lome",
+      description: "La reference pour les plats maison",
+      logoUrl: "https://cdn.cartigo.test/logo.png",
+      coverImageUrl: "https://cdn.cartigo.test/cover.png",
+      openingHours: {
+        timezone: "Africa/Lome",
+        schedule: [
+          { day: "MONDAY", opensAt: "08:00", closesAt: "22:00", isClosed: false },
+          { day: "TUESDAY", opensAt: "08:00", closesAt: "22:00", isClosed: false },
+        ],
+      },
+    });
+
+    await global.prisma.category.create({
+      data: {
+        name: "Pizzas",
+        organizationId: organization.id,
+      },
+    });
+
+    const pizzasCategory = await global.prisma.category.findFirstOrThrow({
+      where: {
+        organizationId: organization.id,
+        name: "Pizzas",
+      },
+    });
+
+    const drinkCategory = await global.prisma.category.create({
+      data: {
+        name: "Boissons",
+        organizationId: organization.id,
+      },
+    });
+
+    const margherita = await global.prisma.product.create({
+      data: {
+        name: "Pizza Margherita",
+        price: 4500,
+        sku: "PIZZA-001",
+        organizationId: organization.id,
+        categoryId: pizzasCategory.id,
+      },
+    });
+
+    await global.prisma.inventory.create({
+      data: {
+        organizationId: organization.id,
+        productId: margherita.id,
+        quantity: 12,
+      },
+    });
+
+    const soda = await global.prisma.product.create({
+      data: {
+        name: "Soda maison",
+        description: "Boisson fraiche",
+        price: 1500,
+        sku: "DRINK-001",
+        organizationId: organization.id,
+        categoryId: drinkCategory.id,
+      },
+    });
+
+    await global.prisma.inventory.create({
+      data: {
+        organizationId: organization.id,
+        productId: soda.id,
+        quantity: 7,
+      },
+    });
+
+    const response = await request(app)
+      .get(`/public/organizations/${organization.id}`)
+      .expect(200);
+
+    expect(response.body).toMatchObject({
+      id: organization.id,
+      name: "Maison Cartigo",
+      address: "Rue de Lome",
+      description: "La reference pour les plats maison",
+      logo: "https://cdn.cartigo.test/logo.png",
+      coverImage: "https://cdn.cartigo.test/cover.png",
+      categoryId: organizationCategory.id,
+      category: organizationCategory.name,
+    });
+
+    expect(response.body.categories).toEqual([
+      expect.objectContaining({
+        id: drinkCategory.id,
+        name: "Boissons",
+        productCount: 1,
+      }),
+      expect.objectContaining({
+        id: pizzasCategory.id,
+        name: "Pizzas",
+        productCount: 1,
+      }),
+    ]);
+
+    expect(response.body.products).toEqual([
+      expect.objectContaining({
+        name: "Soda maison",
+        categoryId: drinkCategory.id,
+        categoryName: "Boissons",
+        quantity: 7,
+      }),
+      expect.objectContaining({
+        name: "Pizza Margherita",
+        categoryId: pizzasCategory.id,
+        categoryName: "Pizzas",
+        quantity: 12,
+      }),
+    ]);
   });
 });

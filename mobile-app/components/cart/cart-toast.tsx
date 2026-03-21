@@ -15,7 +15,7 @@ export function CartToast({ text, type }: CartToastProps) {
 
   return (
     <View style={[styles.toast, { backgroundColor }]}>
-      <Text style={styles.text}>{text}</Text>
+      <Text style={[styles.text, { color: palette.inverseText }]}>{text}</Text>
     </View>
   );
 }
@@ -29,7 +29,6 @@ const styles = StyleSheet.create({
     maxWidth: 340,
   },
   text: {
-    color: '#FFFFFF',
     fontFamily: Fonts.rounded,
     fontSize: 14,
     fontWeight: '700',
