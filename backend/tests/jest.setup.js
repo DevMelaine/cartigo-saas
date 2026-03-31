@@ -21,6 +21,8 @@ afterEach(async () => {
     "Product",
     "Category",
     "RefreshToken",
+    "PasswordResetToken",
+    "Invitation",
     "CustomerRefreshToken",
     "RefreshCustomerToken",
     "CustomerAuditLog",

@@ -1,13 +1,24 @@
-const { PrismaClient } = require("@prisma/client");
+const { PrismaClient, Prisma } = require("@prisma/client");
 const {
   ORDER_STATUS,
   isReadyForDelivery,
   isValidOrderStatusTransition,
 } = require("../utils/orderLifecycle");
+const { resolvePublicFileUrl } = require("../modules/storage/storage.service");
 const notificationService = require("./notification.service");
 const { NOTIFICATION_TYPES } = require("../utils/notificationEvents");
 
 const prisma = global.prisma || new PrismaClient();
+const SALES_TREND_STATUSES = [
+  ORDER_STATUS.PAID,
+  ORDER_STATUS.PROCESSING,
+  ORDER_STATUS.READY_FOR_DELIVERY,
+  ORDER_STATUS.IN_DELIVERY,
+  ORDER_STATUS.DELIVERED,
+];
+const SALES_TREND_STATUS_SQL = Prisma.join(
+  SALES_TREND_STATUSES.map((status) => Prisma.sql`${status}::"OrderStatus"`)
+);
 
 function buildCartLookup(customerId, organizationId) {
   if (organizationId) {
@@ -75,8 +86,150 @@ function normalizeOrder(order) {
     items: order.items.map((item) => ({
       ...item,
       price: Number(item.price),
+      product: item.product
+        ? {
+            ...item.product,
+            imageUrl: resolvePublicFileUrl(item.product.imageUrl),
+          }
+        : item.product,
     })),
   };
+}
+
+function safeResolveOrderImagePreviewUrl(path, context) {
+  const previewUrl = resolvePublicFileUrl(path);
+
+  if (!previewUrl && path) {
+    console.warn(`ORDER_IMAGE_PREVIEW_FAILED context=${context}`);
+  }
+
+  return previewUrl;
+}
+
+async function enrichOrderForDashboard(order) {
+  const normalizedOrder = normalizeOrder(order);
+
+  const items = await Promise.all(
+    normalizedOrder.items.map(async (item) => ({
+      ...item,
+      product: item.product
+        ? {
+            ...item.product,
+            imagePreviewUrl: safeResolveOrderImagePreviewUrl(
+              item.product.imageUrl,
+              `order=${normalizedOrder.id} product=${item.product.id}`
+            ),
+          }
+        : item.product,
+    }))
+  );
+
+  return {
+    ...normalizedOrder,
+    items,
+  };
+}
+
+function normalizeOptionalSearch(value) {
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const normalizedValue = value.trim();
+  return normalizedValue.length > 0 ? normalizedValue : null;
+}
+
+function resolveDateStart(value) {
+  if (!value) {
+    return null;
+  }
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return null;
+  }
+
+  date.setUTCHours(0, 0, 0, 0);
+  return date;
+}
+
+function resolveDateEnd(value) {
+  if (!value) {
+    return null;
+  }
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return null;
+  }
+
+  date.setUTCHours(23, 59, 59, 999);
+  return date;
+}
+
+function buildOrganizationOrderWhere({ organizationId, filters = {} }) {
+  const where = {
+    organizationId,
+  };
+
+  if (filters.status) {
+    where.status = filters.status;
+  }
+
+  const normalizedSearch = normalizeOptionalSearch(filters.search);
+  if (normalizedSearch) {
+    where.OR = [
+      {
+        id: {
+          contains: normalizedSearch,
+        },
+      },
+      {
+        customer: {
+          name: {
+            contains: normalizedSearch,
+            mode: "insensitive",
+          },
+        },
+      },
+      {
+        customer: {
+          email: {
+            contains: normalizedSearch,
+            mode: "insensitive",
+          },
+        },
+      },
+    ];
+  }
+
+  const dateFrom = resolveDateStart(filters.dateFrom);
+  const dateTo = resolveDateEnd(filters.dateTo);
+  if (dateFrom || dateTo) {
+    where.createdAt = {};
+
+    if (dateFrom) {
+      where.createdAt.gte = dateFrom;
+    }
+
+    if (dateTo) {
+      where.createdAt.lte = dateTo;
+    }
+  }
+
+  if (filters.minTotal !== undefined || filters.maxTotal !== undefined) {
+    where.total = {};
+
+    if (filters.minTotal !== undefined) {
+      where.total.gte = Number(filters.minTotal);
+    }
+
+    if (filters.maxTotal !== undefined) {
+      where.total.lte = Number(filters.maxTotal);
+    }
+  }
+
+  return where;
 }
 
 function buildLowStockEvent(product, previousQuantity, nextQuantity) {
@@ -103,6 +256,10 @@ function dedupeLowStockEvents(events) {
   }
 
   return Array.from(byProduct.values());
+}
+
+function formatUtcDateLabel(date) {
+  return date.toISOString().slice(0, 10);
 }
 
 function assertRoleCanChangeStatus(role, currentStatus, nextStatus) {
@@ -315,13 +472,12 @@ class OrderService {
    * The query stays fully organization-scoped to preserve tenant isolation.
    */
   static async listOrganizationOrders({ organizationId, filters = {} }) {
-    const { page = 1, limit = 20, status } = filters;
+    const { page = 1, limit = 20 } = filters;
     const skip = (page - 1) * limit;
-
-    const where = {
+    const where = buildOrganizationOrderWhere({
       organizationId,
-      ...(status ? { status } : {}),
-    };
+      filters,
+    });
 
     const [orders, total] = await Promise.all([
       prisma.order.findMany({
@@ -353,6 +509,129 @@ class OrderService {
         totalPages: Math.ceil(total / limit),
       },
     };
+  }
+
+  /**
+   * Returns a single organization-owned order for dashboard use.
+   */
+  static async getOrganizationOrderById({ orderId, organizationId }) {
+    const order = await prisma.order.findFirst({
+      where: {
+        id: orderId,
+        organizationId,
+      },
+      include: buildOrderInclude({ includeAuditLogs: true }),
+    });
+
+    if (!order) {
+      const error = new Error("Order not found.");
+      error.statusCode = 404;
+      throw error;
+    }
+
+    return enrichOrderForDashboard(order);
+  }
+
+  /**
+   * Aggregates organization order overview metrics for dashboard cards.
+   */
+  static async getOrganizationOrderOverview({ organizationId }) {
+    const [statusGroups, revenueAggregate] = await Promise.all([
+      prisma.order.groupBy({
+        by: ["status"],
+        where: {
+          organizationId,
+        },
+        _count: {
+          _all: true,
+        },
+      }),
+      prisma.order.aggregate({
+        where: {
+          organizationId,
+          status: {
+            in: SALES_TREND_STATUSES,
+          },
+        },
+        _sum: {
+          total: true,
+        },
+      }),
+    ]);
+
+    const countsByStatus = statusGroups.reduce((accumulator, entry) => {
+      accumulator[entry.status] = entry._count._all;
+      return accumulator;
+    }, {});
+
+    return {
+      totalOrders: statusGroups.reduce(
+        (sum, entry) => sum + entry._count._all,
+        0
+      ),
+      totalRevenue: Number(revenueAggregate._sum.total || 0),
+      pendingOrders: countsByStatus[ORDER_STATUS.PENDING_PAYMENT] || 0,
+      inProgressOrders:
+        (countsByStatus[ORDER_STATUS.PAID] || 0) +
+        (countsByStatus[ORDER_STATUS.PROCESSING] || 0) +
+        (countsByStatus[ORDER_STATUS.READY_FOR_DELIVERY] || 0) +
+        (countsByStatus[ORDER_STATUS.IN_DELIVERY] || 0),
+      deliveredOrders: countsByStatus[ORDER_STATUS.DELIVERED] || 0,
+      cancelledOrders: countsByStatus[ORDER_STATUS.CANCELLED] || 0,
+    };
+  }
+
+  /**
+   * Aggregates organization sales for the last N days.
+   * Keeps the payload compact and analytics-ready for dashboard consumption.
+   */
+  static async getOrganizationSalesTrend({ organizationId, days = 30 }) {
+    const safeDays = Math.max(7, Math.min(days, 90));
+    const startDate = new Date();
+    startDate.setUTCHours(0, 0, 0, 0);
+    startDate.setUTCDate(startDate.getUTCDate() - (safeDays - 1));
+
+    const rows = await prisma.$queryRaw(
+      Prisma.sql`
+        SELECT
+          DATE(o."createdAt")::text AS "date",
+          COUNT(*)::int AS "orders",
+          COALESCE(SUM(o."total"), 0)::text AS "revenue"
+        FROM "Order" o
+        WHERE o."organizationId" = ${organizationId}
+          AND o."status" IN (${SALES_TREND_STATUS_SQL})
+          AND o."createdAt" >= ${startDate}
+        GROUP BY DATE(o."createdAt")
+        ORDER BY DATE(o."createdAt") ASC
+      `
+    );
+
+    const metricsByDate = new Map(
+      rows.map((row) => [
+        row.date,
+        {
+          orders: Number(row.orders) || 0,
+          revenue: Number(row.revenue) || 0,
+        },
+      ])
+    );
+
+    const trend = [];
+
+    for (let index = 0; index < safeDays; index += 1) {
+      const currentDate = new Date(startDate);
+      currentDate.setUTCDate(startDate.getUTCDate() + index);
+      const key = formatUtcDateLabel(currentDate);
+      const metric = metricsByDate.get(key);
+
+      trend.push({
+        date: key,
+        orders: metric?.orders || 0,
+        revenue: metric?.revenue || 0,
+      });
+    }
+
+    return trend;
   }
 
   /**
@@ -438,7 +717,7 @@ class OrderService {
       });
     }
 
-    return normalizeOrder(updatedOrder);
+    return enrichOrderForDashboard(updatedOrder);
   }
 }
 

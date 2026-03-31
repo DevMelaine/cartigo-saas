@@ -37,6 +37,16 @@ function toPushData(notification) {
   };
 }
 
+function isInvalidPushTokenError(error) {
+  const code = error?.code || error?.errorInfo?.code;
+
+  return [
+    "messaging/invalid-registration-token",
+    "messaging/registration-token-not-registered",
+    "messaging/invalid-argument",
+  ].includes(code);
+}
+
 class FirebasePushProvider {
   /**
    * Sends one push payload to all device tokens for the same recipient.
@@ -44,13 +54,13 @@ class FirebasePushProvider {
    */
   async sendToTokens(tokens, payload) {
     if (!tokens.length) {
-      return { sentCount: 0, skipped: true };
+      return { sentCount: 0, skipped: true, invalidTokens: [] };
     }
 
     const messaging = getMessagingClient();
 
     if (!messaging) {
-      return { sentCount: 0, skipped: true };
+      return { sentCount: 0, skipped: true, invalidTokens: [] };
     }
 
     const message = {
@@ -63,10 +73,20 @@ class FirebasePushProvider {
     };
 
     if (typeof messaging.sendEachForMulticast === "function") {
-      return messaging.sendEachForMulticast(message);
+      const result = await messaging.sendEachForMulticast(message);
+      const invalidTokens = result.responses
+        .map((response, index) => (response.success || !isInvalidPushTokenError(response.error) ? null : tokens[index]))
+        .filter(Boolean);
+
+      return {
+        sentCount: result.successCount,
+        skipped: false,
+        invalidTokens,
+        raw: result,
+      };
     }
 
-    await Promise.all(
+    const results = await Promise.allSettled(
       tokens.map((token) =>
         messaging.send({
           token,
@@ -77,7 +97,13 @@ class FirebasePushProvider {
     );
 
     return {
-      sentCount: tokens.length,
+      sentCount: results.filter((result) => result.status === "fulfilled").length,
+      skipped: false,
+      invalidTokens: results
+        .map((result, index) =>
+          result.status === "rejected" && isInvalidPushTokenError(result.reason) ? tokens[index] : null
+        )
+        .filter(Boolean),
     };
   }
 }
@@ -122,8 +148,9 @@ class NotificationService {
       ...buildRecipientFilter(actorType, actorId),
       ...(typeof unread === "boolean" ? { isRead: !unread } : {}),
     };
+    const recipientFilter = buildRecipientFilter(actorType, actorId);
 
-    const [notifications, total] = await Promise.all([
+    const [notifications, total, unreadCount] = await Promise.all([
       this.prisma.notification.findMany({
         where,
         skip,
@@ -133,16 +160,36 @@ class NotificationService {
         },
       }),
       this.prisma.notification.count({ where }),
+      this.prisma.notification.count({
+        where: {
+          ...recipientFilter,
+          isRead: false,
+        },
+      }),
     ]);
 
     return {
       data: notifications,
+      unreadCount,
       pagination: {
         page,
         limit,
         total,
         totalPages: Math.ceil(total / limit),
       },
+    };
+  }
+
+  async getUnreadCount({ actorType, actorId }) {
+    const unreadCount = await this.prisma.notification.count({
+      where: {
+        ...buildRecipientFilter(actorType, actorId),
+        isRead: false,
+      },
+    });
+
+    return {
+      unreadCount,
     };
   }
 
@@ -399,11 +446,21 @@ class NotificationService {
           return;
         }
 
-        await this.pushProvider.sendToTokens(tokens, {
+        const result = await this.pushProvider.sendToTokens(tokens, {
           title: notification.title,
           body: notification.message,
           data: toPushData(notification),
         });
+
+        if (result?.invalidTokens?.length) {
+          await this.prisma.deviceToken.deleteMany({
+            where: {
+              token: {
+                in: result.invalidTokens,
+              },
+            },
+          });
+        }
       })
     );
   }

@@ -1,4 +1,3 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   createContext,
   startTransition,
@@ -9,18 +8,15 @@ import {
   type ReactNode,
 } from 'react';
 
+import { authService } from '@/services/auth.service';
 import { customerAuthService } from '@/services/customer-auth.service';
+import { clearStoredSession, getStoredSession, saveCustomerSession } from '@/services/token.service';
 import type {
   Customer,
   CustomerCredentials,
   CustomerRegistration,
   CustomerSession,
 } from '@/types/auth';
-
-const SESSION_STORAGE_KEY = 'cartigo.customer-session';
-export const AUTH_TOKEN_STORAGE_KEY = 'token';
-
-let memorySessionStore: string | null = null;
 
 type CustomerSessionContextValue = {
   customer: Customer | null;
@@ -37,49 +33,6 @@ type CustomerSessionContextValue = {
 
 const CustomerSessionContext = createContext<CustomerSessionContextValue | null>(null);
 
-async function readStoredSession() {
-  try {
-    const stored = await AsyncStorage.getItem(SESSION_STORAGE_KEY);
-
-    if (stored) {
-      memorySessionStore = stored;
-    }
-
-    return stored;
-  } catch {
-    return memorySessionStore;
-  }
-}
-
-async function persistSession(session: CustomerSession | null) {
-  if (!session) {
-    memorySessionStore = null;
-
-    try {
-      await Promise.all([
-        AsyncStorage.removeItem(SESSION_STORAGE_KEY),
-        AsyncStorage.removeItem(AUTH_TOKEN_STORAGE_KEY),
-      ]);
-    } catch {
-      return;
-    }
-
-    return;
-  }
-
-  const serializedSession = JSON.stringify(session);
-  memorySessionStore = serializedSession;
-
-  try {
-    await Promise.all([
-      AsyncStorage.setItem(SESSION_STORAGE_KEY, serializedSession),
-      AsyncStorage.setItem(AUTH_TOKEN_STORAGE_KEY, session.accessToken),
-    ]);
-  } catch {
-    return;
-  }
-}
-
 export function CustomerSessionProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<CustomerSession | null>(null);
   const [isHydrating, setIsHydrating] = useState(true);
@@ -90,19 +43,18 @@ export function CustomerSessionProvider({ children }: { children: ReactNode }) {
 
     async function hydrate() {
       try {
-        const stored = await readStoredSession();
+        const storedSession = await getStoredSession();
 
-        if (!active || !stored) {
+        if (!active || !storedSession) {
           return;
         }
 
-        const parsed = JSON.parse(stored) as CustomerSession;
         startTransition(() => {
-          setSession(parsed);
+          setSession(storedSession);
         });
       } catch {
         if (active) {
-          await persistSession(null);
+          await clearStoredSession();
         }
       } finally {
         if (active) {
@@ -118,8 +70,27 @@ export function CustomerSessionProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
+  useEffect(() => {
+    const unsubscribeRefresh = authService.subscribeToSessionRefresh((nextSession) => {
+      startTransition(() => {
+        setSession(nextSession);
+      });
+    });
+
+    const unsubscribeFailure = authService.subscribeToAuthFailure(() => {
+      startTransition(() => {
+        setSession(null);
+      });
+    });
+
+    return () => {
+      unsubscribeRefresh();
+      unsubscribeFailure();
+    };
+  }, []);
+
   async function applySession(nextSession: CustomerSession) {
-    await persistSession(nextSession);
+    await saveCustomerSession(nextSession);
     startTransition(() => {
       setSession(nextSession);
     });
@@ -149,7 +120,7 @@ export function CustomerSessionProvider({ children }: { children: ReactNode }) {
   async function logout() {
     setIsSubmitting(true);
     try {
-      await persistSession(null);
+      await clearStoredSession();
       startTransition(() => {
         setSession(null);
       });

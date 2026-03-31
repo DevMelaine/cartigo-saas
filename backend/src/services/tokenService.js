@@ -74,6 +74,35 @@ async function rotateRefreshToken(oldRefreshToken) {
   };
 }
 
+async function revokeRefreshToken(refreshToken) {
+  if (!refreshToken || typeof refreshToken !== "string") {
+    return false;
+  }
+
+  const refreshTokenHash = hashToken(refreshToken);
+
+  const existing = await prisma.refreshToken.findFirst({
+    where: {
+      tokenHash: refreshTokenHash,
+    },
+    select: {
+      id: true,
+    },
+  });
+
+  if (!existing) {
+    return false;
+  }
+
+  await prisma.refreshToken.delete({
+    where: {
+      id: existing.id,
+    },
+  });
+
+  return true;
+}
+
 // customer-specific token helpers
 async function createTokenPairForCustomer(customer) {
   const payload = {
@@ -136,5 +165,6 @@ module.exports = {
   createTokenPairForCustomer,
   rotateRefreshToken,
   rotateCustomerRefreshToken,
+  revokeRefreshToken,
 };
 

@@ -32,7 +32,7 @@ class CartService {
       where: {
         id: productId,
         ...(organizationId ? { organizationId } : {}),
-        isActive: true
+        status: "ACTIVE"
       },
       include: {
         inventory: true

@@ -2,6 +2,52 @@ const OrderService = require("../services/order.service");
 const { listOrdersSchema, updateOrderStatusSchema } = require("../validators/order.validator");
 
 class OrderController {
+  static async getOverview(req, res) {
+    try {
+      const overview = await OrderService.getOrganizationOrderOverview({
+        organizationId: req.user.organizationId,
+      });
+
+      return res.status(200).json({
+        success: true,
+        data: overview,
+      });
+    } catch (error) {
+      return res.status(error.statusCode || 500).json({
+        success: false,
+        message: error.message || "Unable to fetch order overview.",
+      });
+    }
+  }
+
+  static async getSalesTrend(req, res) {
+    try {
+      const days = req.query.days ? parseInt(req.query.days, 10) : 30;
+
+      if (Number.isNaN(days) || days < 7 || days > 90) {
+        return res.status(400).json({
+          success: false,
+          message: "Days must be between 7 and 90.",
+        });
+      }
+
+      const trend = await OrderService.getOrganizationSalesTrend({
+        organizationId: req.user.organizationId,
+        days,
+      });
+
+      return res.status(200).json({
+        success: true,
+        data: trend,
+      });
+    } catch (error) {
+      return res.status(error.statusCode || 500).json({
+        success: false,
+        message: error.message || "Unable to fetch sales trend.",
+      });
+    }
+  }
+
   /**
    * Creates a storefront order for the authenticated customer.
    */
@@ -107,6 +153,28 @@ class OrderController {
       return res.status(404).json({
         success: false,
         message: error.message,
+      });
+    }
+  }
+
+  /**
+   * Returns one organization-owned order for the dashboard.
+   */
+  static async getOrganizationOrder(req, res) {
+    try {
+      const order = await OrderService.getOrganizationOrderById({
+        orderId: req.params.id,
+        organizationId: req.user.organizationId,
+      });
+
+      return res.status(200).json({
+        success: true,
+        data: order,
+      });
+    } catch (error) {
+      return res.status(error.statusCode || 500).json({
+        success: false,
+        message: error.message || "Unable to fetch order details.",
       });
     }
   }

@@ -18,7 +18,24 @@ const loginSchema = Joi.object({
   password: Joi.string().required(),
 });
 
+const googleCallbackSchema = Joi.object({
+  code: Joi.string().required(),
+  state: Joi.string().required(),
+});
+
+const forgotPasswordSchema = Joi.object({
+  email: Joi.string().trim().lowercase().email().required(),
+});
+
+const resetPasswordSchema = Joi.object({
+  token: Joi.string().trim().min(32).required(),
+  password: Joi.string().min(8).max(255).required(),
+});
+
 module.exports = {
   registerOrganizationSchema,
   loginSchema,
+  googleCallbackSchema,
+  forgotPasswordSchema,
+  resetPasswordSchema,
 };

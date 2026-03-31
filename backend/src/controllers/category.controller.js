@@ -12,11 +12,11 @@ async function create(req, res) {
 
 async function list(req, res) {
   try {
-    const { skip = 0, take = 10 } = req.query;
-    const result = await categoryService.listCategories(req.user.organizationId, { skip, take });
+    const result = await categoryService.listCategories(req.user.organizationId, req.query);
     return res.status(200).json({ success: true, data: result });
   } catch (err) {
-    return res.status(500).json({ success: false, message: err.message });
+    const status = err.statusCode || 500;
+    return res.status(status).json({ success: false, message: err.message, details: err.details });
   }
 }
 

@@ -1,6 +1,7 @@
 const request = require("supertest");
 const app = require("../../src/app");
 const { getAuthToken, getTokenForRole } = require("../helpers/authHelper");
+const { ensureProductCategory } = require("../helpers/productCategoryHelper");
 
 /**
  * Product update and delete tests
@@ -11,6 +12,7 @@ const { getAuthToken, getTokenForRole } = require("../helpers/authHelper");
 
 // helper: create a product
 async function createProduct(token) {
+  const category = await ensureProductCategory(token);
   const res = await request(app)
     .post("/api/products")
     .set("Authorization", `Bearer ${token}`)
@@ -19,6 +21,7 @@ async function createProduct(token) {
       price: 20,
       stock: 100,
       sku: `SKU-${Date.now()}`,
+      categoryId: category.id,
     });
   return res.body.data;
 }
@@ -45,6 +48,7 @@ describe("PUT /api/products/:id", () => {
   it("should update multiple fields", async () => {
     const token = await getAuthToken(app);
     const product = await createProduct(token);
+    const category = await ensureProductCategory(token, "Electronics");
 
     const res = await request(app)
       .put(`/api/products/${product.id}`)
@@ -52,7 +56,7 @@ describe("PUT /api/products/:id", () => {
       .send({
         name: "Multi Update",
         stock: 200,
-        category: "Electronics",
+        categoryId: category.id,
         lowStockThreshold: 50,
       })
       .expect(200);
@@ -137,6 +141,38 @@ describe("PUT /api/products/:id", () => {
     expect(res.body.success).toBe(false);
   });
 
+  it("should update product status through the dedicated status endpoint", async () => {
+    const token = await getAuthToken(app);
+    const product = await createProduct(token);
+
+    const res = await request(app)
+      .patch(`/api/products/${product.id}/status`)
+      .set("Authorization", `Bearer ${token}`)
+      .send({
+        status: "PAUSED",
+      })
+      .expect(200);
+
+    expect(res.body.success).toBe(true);
+    expect(res.body.data.status).toBe("PAUSED");
+    expect(res.body.data.isActive).toBe(false);
+  });
+
+  it("should reject invalid product status transitions", async () => {
+    const token = await getAuthToken(app);
+    const product = await createProduct(token);
+
+    const res = await request(app)
+      .patch(`/api/products/${product.id}/status`)
+      .set("Authorization", `Bearer ${token}`)
+      .send({
+        status: "DRAFT",
+      })
+      .expect(400);
+
+    expect(res.body.success).toBe(false);
+  });
+
 });
 
 describe("DELETE /api/products/:id", () => {
@@ -150,7 +186,7 @@ describe("DELETE /api/products/:id", () => {
       .expect(200);
 
     expect(res.body.success).toBe(true);
-    expect(res.body.message).toMatch(/deleted/i);
+    expect(res.body.message).toMatch(/deleted|archived/i);
   });
 
   it("should hide soft deleted product from listings", async () => {
@@ -200,7 +236,49 @@ describe("DELETE /api/products/:id", () => {
       .set("Authorization", `Bearer ${token1}`)
       .expect(200);
 
-    expect(getRes.body.data.isActive).toBe(true);
+    expect(getRes.body.data.status).toBe("ACTIVE");
+  });
+
+  it("should archive a product instead of removing it permanently", async () => {
+    const token = await getAuthToken(app);
+    const product = await createProduct(token);
+
+    await request(app)
+      .delete(`/api/products/${product.id}`)
+      .set("Authorization", `Bearer ${token}`)
+      .expect(200);
+
+    const archivedRes = await request(app)
+      .get("/api/products?status=archived")
+      .set("Authorization", `Bearer ${token}`)
+      .expect(200);
+
+    expect(archivedRes.body.data.some((item) => item.id === product.id)).toBe(true);
+    expect(
+      archivedRes.body.data.find((item) => item.id === product.id)?.status
+    ).toBe("ARCHIVED");
+  });
+
+  it("should permanently delete an archived product", async () => {
+    const token = await getAuthToken(app);
+    const product = await createProduct(token);
+
+    await request(app)
+      .delete(`/api/products/${product.id}`)
+      .set("Authorization", `Bearer ${token}`)
+      .expect(200);
+
+    const res = await request(app)
+      .delete(`/api/products/${product.id}/permanent`)
+      .set("Authorization", `Bearer ${token}`)
+      .expect(200);
+
+    expect(res.body.success).toBe(true);
+
+    await request(app)
+      .get(`/api/products/${product.id}`)
+      .set("Authorization", `Bearer ${token}`)
+      .expect(404);
   });
 });
 
@@ -213,6 +291,7 @@ describe("Role-based authorization", () => {
 
   it("should allow ADMIN to create products", async () => {
     const token = await getAuthToken(app);
+    const category = await ensureProductCategory(token);
 
     const res = await request(app)
       .post("/api/products")
@@ -222,6 +301,7 @@ describe("Role-based authorization", () => {
         price: 10,
         stock: 50,
         sku: "ADMIN-001",
+        categoryId: category.id,
       })
       .expect(201);
 
@@ -230,6 +310,7 @@ describe("Role-based authorization", () => {
 
   it("should forbid STAFF from creating products", async () => {
     const token = await getTokenForRole(app, "STAFF");
+    const category = await ensureProductCategory(token);
     const res = await request(app)
       .post("/api/products")
       .set("Authorization", `Bearer ${token}`)
@@ -238,6 +319,7 @@ describe("Role-based authorization", () => {
         price: 10,
         stock: 50,
         sku: "EMP-001",
+        categoryId: category.id,
       })
       .expect(403);
 

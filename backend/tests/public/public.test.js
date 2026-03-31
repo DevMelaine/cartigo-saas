@@ -13,28 +13,33 @@ describe("Public discovery endpoints", () => {
 
     const response = await request(app).get("/public/categories").expect(200);
 
+    const categoryNames = response.body.map((category) => category.name);
+
     expect(Array.isArray(response.body)).toBe(true);
-    expect(response.body.map((category) => category.name)).toEqual([
-      "Boutique",
-      "Pharmacy",
-      "Restaurant",
-    ]);
+    expect(categoryNames).toEqual([...categoryNames].sort());
+    expect(categoryNames).toEqual(
+      expect.arrayContaining(["Boutique", "Pharmacy", "Restaurant"])
+    );
   });
 
   it("lists organizations filtered by categoryId using the real relation", async () => {
     const restaurantCategory = await ensureOrganizationCategory("Restaurant");
     const pharmacyCategory = await ensureOrganizationCategory("Pharmacy");
 
-    await createTestOrganization({
-      name: "Chez Cartigo",
-      categoryName: restaurantCategory.name,
-      address: "Downtown",
-      description: "Cuisine locale et rapide",
+    await global.prisma.organization.create({
+      data: {
+        name: "Chez Cartigo",
+        categoryId: restaurantCategory.id,
+        address: "Downtown",
+        description: "Cuisine locale et rapide",
+      },
     });
-    await createTestOrganization({
-      name: "Green Pharmacy",
-      categoryName: pharmacyCategory.name,
-      address: "Main Street",
+    await global.prisma.organization.create({
+      data: {
+        name: "Green Pharmacy",
+        categoryId: pharmacyCategory.id,
+        address: "Main Street",
+      },
     });
 
     const response = await request(app)

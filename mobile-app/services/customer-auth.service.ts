@@ -26,11 +26,7 @@ export const customerAuthService = {
     });
   },
 
-  profile(accessToken: string) {
-    return apiClient.get<CustomerProfileResponse>('/customers/profile', {
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-      },
-    });
+  profile(_accessToken?: string) {
+    return apiClient.get<CustomerProfileResponse>('/customers/profile');
   },
 };

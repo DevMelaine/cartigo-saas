@@ -260,7 +260,52 @@ describe("Notifications module", () => {
     expect(response.body.data).toHaveLength(1);
     expect(response.body.data[0].userId).toBe(context.users.admin.id);
     expect(response.body.data[0].isRead).toBe(false);
+    expect(response.body.unreadCount).toBe(1);
     expect(response.body.pagination.total).toBe(1);
+  });
+
+  it("returns the unread notifications count for the current actor only", async () => {
+    const context = await seedNotificationActors();
+
+    await prisma.notification.createMany({
+      data: [
+        {
+          userId: context.users.admin.id,
+          organizationId: context.organization.id,
+          type: NOTIFICATION_TYPES.ORDER_READY,
+          title: "Unread one",
+          message: "Unread one",
+          isRead: false,
+          eventKey: `unread-count-1-${randomUUID()}`,
+        },
+        {
+          userId: context.users.admin.id,
+          organizationId: context.organization.id,
+          type: NOTIFICATION_TYPES.ORDER_READY,
+          title: "Read one",
+          message: "Read one",
+          isRead: true,
+          eventKey: `unread-count-2-${randomUUID()}`,
+        },
+        {
+          userId: context.users.manager.id,
+          organizationId: context.organization.id,
+          type: NOTIFICATION_TYPES.ORDER_READY,
+          title: "Manager unread",
+          message: "Manager unread",
+          isRead: false,
+          eventKey: `unread-count-3-${randomUUID()}`,
+        },
+      ],
+    });
+
+    const response = await request(app)
+      .get("/api/notifications/unread-count")
+      .set("Authorization", `Bearer ${context.tokens.admin}`)
+      .expect(200);
+
+    expect(response.body.success).toBe(true);
+    expect(response.body.data.unreadCount).toBe(1);
   });
 
   it("marks a single notification as read only for its owner", async () => {

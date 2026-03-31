@@ -2,6 +2,7 @@ node_modules
 # Keep environment variables out of version control
 .env
 .env.test
+.env.example
 
 backend/config/cartigoapp-firebase-adminsdk-fbsvc-d8ee838d43.json
 

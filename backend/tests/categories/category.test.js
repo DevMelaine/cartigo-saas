@@ -99,6 +99,15 @@ describe("Category Management", () => {
 
   describe("GET /api/categories", () => {
     it("should list all categories", async () => {
+      await request(app)
+        .post("/api/categories")
+        .set("Authorization", `Bearer ${adminToken}`)
+        .send({
+          name: "Fresh products",
+          description: "Catalogue principal",
+        })
+        .expect(201);
+
       const res = await request(app)
         .get("/api/categories")
         .set("Authorization", `Bearer ${adminToken}`)
@@ -108,6 +117,7 @@ describe("Category Management", () => {
       expect(res.body.data).toHaveProperty("data");
       expect(res.body.data).toHaveProperty("total");
       expect(Array.isArray(res.body.data.data)).toBe(true);
+      expect(res.body.data.data[0]).toHaveProperty("productCount");
     });
 
     it("should support pagination", async () => {
@@ -245,6 +255,35 @@ describe("Category Management", () => {
         .delete(`/api/categories/${fakeId}`)
         .set("Authorization", `Bearer ${adminToken}`)
         .expect(404);
+
+      expect(res.body.success).toBe(false);
+    });
+
+    it("should reject deleting a category that is still assigned to products", async () => {
+      const categoryRes = await request(app)
+        .post("/api/categories")
+        .set("Authorization", `Bearer ${adminToken}`)
+        .send({
+          name: "Protected category",
+        })
+        .expect(201);
+
+      await request(app)
+        .post("/api/products")
+        .set("Authorization", `Bearer ${adminToken}`)
+        .send({
+          name: "Bound product",
+          price: 100,
+          stock: 10,
+          sku: "BOUND-001",
+          categoryId: categoryRes.body.data.id,
+        })
+        .expect(201);
+
+      const res = await request(app)
+        .delete(`/api/categories/${categoryRes.body.data.id}`)
+        .set("Authorization", `Bearer ${adminToken}`)
+        .expect(409);
 
       expect(res.body.success).toBe(false);
     });

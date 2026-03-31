@@ -1,0 +1,4 @@
+-- Historical migration placeholder.
+-- This migration was already applied in existing environments before the
+-- repository migration history was consolidated. The effective schema changes
+-- are preserved by later migrations that remain in version control.

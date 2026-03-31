@@ -252,6 +252,77 @@ describe("Order lifecycle module", () => {
     expect(response.body.data[0].status).toBe("PAID");
   });
 
+  it("filters organization orders by search, date range and amount range", async () => {
+    const primary = await createOrganizationCustomer("Lifecycle Filters Org");
+    const session = signOrgUserToken({
+      organizationId: primary.organization.id,
+      role: "ADMIN",
+    });
+
+    await createOrder({
+      organizationId: primary.organization.id,
+      customerId: primary.customer.id,
+      status: "PAID",
+      total: 150,
+      createdAt: new Date("2026-01-10T10:00:00.000Z"),
+    });
+    await createOrder({
+      organizationId: primary.organization.id,
+      customerId: primary.customer.id,
+      status: "PROCESSING",
+      total: 950,
+      createdAt: new Date("2026-01-20T10:00:00.000Z"),
+    });
+
+    const response = await request(app)
+      .get("/api/orders")
+      .query({
+        search: primary.customer.name,
+        dateFrom: "2026-01-15",
+        dateTo: "2026-01-30",
+        minTotal: 500,
+        maxTotal: 1000,
+      })
+      .set("Authorization", `Bearer ${session.token}`)
+      .expect(200);
+
+    expect(response.body.success).toBe(true);
+    expect(response.body.data).toHaveLength(1);
+    expect(response.body.data[0].status).toBe("PROCESSING");
+    expect(response.body.data[0].total).toBe(950);
+  });
+
+  it("returns organization order details with customer and audit history", async () => {
+    const { organization, customer } = await createOrganizationCustomer("Lifecycle Detail Org");
+    const order = await createOrder({
+      organizationId: organization.id,
+      customerId: customer.id,
+      status: "PENDING_PAYMENT",
+      total: 640,
+    });
+    const session = signOrgUserToken({
+      organizationId: organization.id,
+      role: "ADMIN",
+    });
+
+    await request(app)
+      .patch(`/api/orders/${order.id}/status`)
+      .set("Authorization", `Bearer ${session.token}`)
+      .send({ status: "PAID" })
+      .expect(200);
+
+    const response = await request(app)
+      .get(`/api/orders/${order.id}/details`)
+      .set("Authorization", `Bearer ${session.token}`)
+      .expect(200);
+
+    expect(response.body.success).toBe(true);
+    expect(response.body.data.id).toBe(order.id);
+    expect(response.body.data.customer.name).toBe(customer.name);
+    expect(Array.isArray(response.body.data.auditLogs)).toBe(true);
+    expect(response.body.data.auditLogs.length).toBeGreaterThan(0);
+  });
+
   it("blocks cross-tenant order status updates", async () => {
     const owner = await createOrganizationCustomer("Lifecycle Owner Org");
     const outsider = await createOrganizationCustomer("Lifecycle Outsider Org");

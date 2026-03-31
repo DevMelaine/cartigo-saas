@@ -6,38 +6,21 @@ type AuthenticatedOptions = {
 };
 
 export const cartService = {
-  getCart({ accessToken }: AuthenticatedOptions) {
-    return apiClient.get<CartResponse>('/cart', {
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-      },
-    });
+  getCart(_options: AuthenticatedOptions) {
+    return apiClient.get<CartResponse>('/cart');
   },
 
   addItem({
-    accessToken,
     productId,
     quantity,
   }: AuthenticatedOptions & {
     productId: string;
     quantity: number;
   }) {
-    return apiClient.post<CartItemMutationResponse>(
-      '/cart/items',
-      { productId, quantity },
-      {
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-        },
-      }
-    );
+    return apiClient.post<CartItemMutationResponse>('/cart/items', { productId, quantity });
   },
 
-  removeItem({ accessToken, itemId }: AuthenticatedOptions & { itemId: string }) {
-    return apiClient.delete<{ success: boolean; message: string }>(`/cart/items/${itemId}`, {
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-      },
-    });
+  removeItem({ itemId }: AuthenticatedOptions & { itemId: string }) {
+    return apiClient.delete<{ success: boolean; message: string }>(`/cart/items/${itemId}`);
   },
 };

@@ -6,23 +6,11 @@ type AuthenticatedOptions = {
 };
 
 export const paymentService = {
-  createPayGatePayment({ accessToken, orderId }: AuthenticatedOptions & { orderId: string }) {
-    return apiClient.post<PaymentCreationResponse>(
-      '/payments/paygate',
-      { orderId },
-      {
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-        },
-      }
-    );
+  createPayGatePayment({ orderId }: AuthenticatedOptions & { orderId: string }) {
+    return apiClient.post<PaymentCreationResponse>('/payments/paygate', { orderId });
   },
 
-  getPaymentStatus({ accessToken, orderId }: AuthenticatedOptions & { orderId: string }) {
-    return apiClient.get<PaymentStatusResponse>(`/payments/status/${orderId}`, {
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-      },
-    });
+  getPaymentStatus({ orderId }: AuthenticatedOptions & { orderId: string }) {
+    return apiClient.get<PaymentStatusResponse>(`/payments/status/${orderId}`);
   },
 };

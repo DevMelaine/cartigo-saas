@@ -6,27 +6,15 @@ type AuthenticatedOptions = {
 };
 
 export const orderService = {
-  checkout({ accessToken }: AuthenticatedOptions) {
-    return apiClient.post<OrderResponse>('/orders/checkout', undefined, {
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-      },
-    });
+  checkout(_options: AuthenticatedOptions) {
+    return apiClient.post<OrderResponse>('/orders/checkout');
   },
 
-  getMyOrders({ accessToken }: AuthenticatedOptions) {
-    return apiClient.get<OrdersResponse>('/orders/my-orders', {
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-      },
-    });
+  getMyOrders(_options: AuthenticatedOptions) {
+    return apiClient.get<OrdersResponse>('/orders/my-orders');
   },
 
-  getOrder({ accessToken, orderId }: AuthenticatedOptions & { orderId: string }) {
-    return apiClient.get<OrderResponse>(`/orders/${orderId}`, {
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-      },
-    });
+  getOrder({ orderId }: AuthenticatedOptions & { orderId: string }) {
+    return apiClient.get<OrderResponse>(`/orders/${orderId}`);
   },
 };

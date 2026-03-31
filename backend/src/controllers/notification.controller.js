@@ -38,6 +38,25 @@ async function listNotifications(req, res) {
   }
 }
 
+async function getUnreadCount(req, res) {
+  try {
+    const result = await notificationService.getUnreadCount({
+      actorType: req.notificationActor.actorType,
+      actorId: req.notificationActor.actorId,
+    });
+
+    return res.status(200).json({
+      success: true,
+      data: result,
+    });
+  } catch (error) {
+    return res.status(error.statusCode || 500).json({
+      success: false,
+      message: error.message || "Unable to fetch unread notifications count.",
+    });
+  }
+}
+
 async function markAsRead(req, res) {
   try {
     const { error, value } = notificationIdParamsSchema.validate(req.params, {
@@ -118,6 +137,7 @@ async function registerDevice(req, res) {
 
 module.exports = {
   listNotifications,
+  getUnreadCount,
   markAsRead,
   markAllAsRead,
   registerDevice,

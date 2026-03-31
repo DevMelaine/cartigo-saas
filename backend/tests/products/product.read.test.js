@@ -1,6 +1,9 @@
 const request = require("supertest");
+const jwt = require("jsonwebtoken");
+const { Prisma } = require("@prisma/client");
 const app = require("../../src/app");
 const { getAuthToken, getTokenForRole } = require("../helpers/authHelper");
+const { ensureProductCategory } = require("../helpers/productCategoryHelper");
 
 /**
  * Product read tests
@@ -11,6 +14,8 @@ const { getAuthToken, getTokenForRole } = require("../helpers/authHelper");
 
 // helper: create multiple products
 async function createProducts(token, count = 5) {
+  const foodCategory = await ensureProductCategory(token, "Food");
+  const beverageCategory = await ensureProductCategory(token, "Beverage");
   const products = [];
   for (let i = 0; i < count; i++) {
     const res = await request(app)
@@ -21,11 +26,49 @@ async function createProducts(token, count = 5) {
         price: 10 + i,
         stock: 50 + i * 10,
         sku: `TEST-00${i + 1}`,
-        category: i % 2 === 0 ? "Food" : "Beverage",
+        categoryId: i % 2 === 0 ? foodCategory.id : beverageCategory.id,
       });
     products.push(res.body.data);
   }
   return products;
+}
+
+function getOrganizationIdFromToken(token) {
+  const secret = process.env.JWT_ACCESS_SECRET || process.env.JWT_SECRET;
+  const decoded = jwt.verify(token, secret);
+  return decoded.organizationId;
+}
+
+async function createDeliveredSale(token, product, quantity = 2) {
+  const organizationId = getOrganizationIdFromToken(token);
+  const customer = await global.prisma.customer.create({
+    data: {
+      email: `metrics+${Date.now()}-${Math.random().toString(16).slice(2)}@example.com`,
+      password: "hashed-password",
+      name: "Metrics customer",
+    },
+  });
+
+  const unitPrice = new Prisma.Decimal(product.price);
+  const total = new Prisma.Decimal(product.price * quantity);
+
+  const order = await global.prisma.order.create({
+    data: {
+      customerId: customer.id,
+      organizationId,
+      status: "DELIVERED",
+      total,
+    },
+  });
+
+  await global.prisma.orderItem.create({
+    data: {
+      orderId: order.id,
+      productId: product.id,
+      quantity,
+      price: unitPrice,
+    },
+  });
 }
 
 describe("GET /api/products", () => {
@@ -87,6 +130,20 @@ describe("GET /api/products", () => {
     expect(res.body.data.every((p) => p.category === "Food")).toBe(true);
   });
 
+  it("should filter by categoryId", async () => {
+    const token = await getAuthToken(app);
+    const products = await createProducts(token, 5);
+    const targetCategoryId = products.find((product) => product.categoryId)?.categoryId;
+
+    const res = await request(app)
+      .get(`/api/products?categoryId=${targetCategoryId}`)
+      .set("Authorization", `Bearer ${token}`)
+      .expect(200);
+
+    expect(res.body.data.length).toBeGreaterThan(0);
+    expect(res.body.data.every((product) => product.categoryId === targetCategoryId)).toBe(true);
+  });
+
   it("should search by product name", async () => {
     const token = await getAuthToken(app);
     await createProducts(token, 5);
@@ -140,7 +197,20 @@ describe("GET /api/products", () => {
     expect(dates).toEqual(sorted);
   });
 
-  it("should not show inactive products", async () => {
+  it("should filter by price range", async () => {
+    const token = await getAuthToken(app);
+    await createProducts(token, 5);
+
+    const res = await request(app)
+      .get("/api/products?minPrice=11&maxPrice=13")
+      .set("Authorization", `Bearer ${token}`)
+      .expect(200);
+
+    expect(res.body.data.length).toBeGreaterThan(0);
+    expect(res.body.data.every((product) => product.price >= 11 && product.price <= 13)).toBe(true);
+  });
+
+  it("should not show archived products in the default listing", async () => {
     const token = await getAuthToken(app);
     const products = await createProducts(token, 2);
 
@@ -156,7 +226,26 @@ describe("GET /api/products", () => {
       .expect(200);
 
     expect(res.body.pagination.total).toBe(1);
-    expect(res.body.data.every((p) => p.isActive)).toBe(true);
+    expect(res.body.data.every((p) => p.status === "ACTIVE")).toBe(true);
+  });
+
+  it("should expose archived products when the archived status filter is requested", async () => {
+    const token = await getAuthToken(app);
+    const products = await createProducts(token, 2);
+
+    await request(app)
+      .delete(`/api/products/${products[0].id}`)
+      .set("Authorization", `Bearer ${token}`)
+      .expect(200);
+
+    const res = await request(app)
+      .get("/api/products?status=archived")
+      .set("Authorization", `Bearer ${token}`)
+      .expect(200);
+
+    expect(res.body.data.length).toBe(1);
+    expect(res.body.data[0].id).toBe(products[0].id);
+    expect(res.body.data[0].status).toBe("ARCHIVED");
   });
 
   it("should not show deleted products", async () => {
@@ -168,7 +257,7 @@ describe("GET /api/products", () => {
       .set("Authorization", `Bearer ${token}`)
       .expect(200);
 
-    expect(res.body.data.every((p) => p.isActive)).toBe(true);
+    expect(res.body.data.every((p) => p.status === "ACTIVE")).toBe(true);
   });
 
   it("should reject invalid pagination parameters", async () => {
@@ -242,5 +331,48 @@ describe("GET /api/products/:id", () => {
       .expect(404);
 
     expect(res.body.success).toBe(false);
+  });
+});
+
+describe("GET /api/products/stats/overview", () => {
+  it("should expose enriched product statistics", async () => {
+    const token = await getAuthToken(app);
+    const products = await createProducts(token, 2);
+
+    await createDeliveredSale(token, products[0], 3);
+
+    const res = await request(app)
+      .get("/api/products/stats/overview")
+      .set("Authorization", `Bearer ${token}`)
+      .expect(200);
+
+    expect(res.body.success).toBe(true);
+    expect(res.body.data.totalProducts).toBe(2);
+    expect(res.body.data.totalSales).toBe(3);
+    expect(res.body.data.revenueGenerated).toBe(products[0].price * 3);
+    expect(typeof res.body.data.topPerformers).toBe("number");
+    expect(typeof res.body.data.lowStockCount).toBe("number");
+  });
+});
+
+describe("GET /api/products/stats/top-performers", () => {
+  it("should rank products by generated revenue", async () => {
+    const token = await getAuthToken(app);
+    const products = await createProducts(token, 3);
+
+    await createDeliveredSale(token, products[0], 5);
+    await createDeliveredSale(token, products[1], 2);
+
+    const res = await request(app)
+      .get("/api/products/stats/top-performers?limit=2")
+      .set("Authorization", `Bearer ${token}`)
+      .expect(200);
+
+    expect(res.body.success).toBe(true);
+    expect(res.body.count).toBe(2);
+    expect(res.body.data[0].id).toBe(products[0].id);
+    expect(res.body.data[0].revenueGenerated).toBeGreaterThanOrEqual(
+      res.body.data[1].revenueGenerated
+    );
   });
 });

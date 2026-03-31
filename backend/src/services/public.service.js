@@ -1,4 +1,5 @@
 const { PrismaClient } = require("@prisma/client");
+const { resolvePublicFileUrl } = require("../modules/storage/storage.service");
 
 const prisma = global.prisma || new PrismaClient();
 
@@ -158,7 +159,10 @@ function buildPublicProduct(product) {
     name: product.name,
     description: product.description || null,
     price: Number(product.price),
-    image: product.imageUrl || null,
+    image: resolvePublicFileUrl(product.imageUrl),
+    galleryImages: (product.galleryImages || [])
+      .map((image) => resolvePublicFileUrl(image))
+      .filter(Boolean),
     quantity: product.inventory?.quantity ?? 0,
     categoryId: product.category?.id || null,
     categoryName: product.category?.name || null,
@@ -240,8 +244,8 @@ async function listOrganizations({ page, limit, categoryId }) {
       address: organization.address,
       categoryId: organization.categoryId,
       category: organization.category.name,
-      logo: organization.logoUrl || null,
-      coverImage: organization.coverImageUrl || null,
+      logo: resolvePublicFileUrl(organization.logoUrl),
+      coverImage: resolvePublicFileUrl(organization.coverImageUrl),
       description: organization.description || null,
     })),
     ...createPagination(page, limit, total),
@@ -268,7 +272,7 @@ async function getOrganization(organizationId) {
       },
       products: {
         where: {
-          isActive: true,
+          status: "ACTIVE",
         },
         orderBy: [
           {
@@ -286,6 +290,7 @@ async function getOrganization(organizationId) {
           description: true,
           price: true,
           imageUrl: true,
+          galleryImages: true,
           category: {
             select: {
               id: true,
@@ -336,8 +341,8 @@ async function getOrganization(organizationId) {
     name: organization.name,
     address: organization.address || null,
     description: organization.description || null,
-    logo: organization.logoUrl || null,
-    coverImage: organization.coverImageUrl || null,
+    logo: resolvePublicFileUrl(organization.logoUrl),
+    coverImage: resolvePublicFileUrl(organization.coverImageUrl),
     categoryId: organization.categoryId,
     category: organization.category.name,
     isOpen: openingStatus.isOpen,
@@ -364,7 +369,7 @@ async function listOrganizationProducts({ organizationId, page, limit, search })
   const skip = (page - 1) * limit;
   const where = {
     organizationId,
-    isActive: true,
+    status: "ACTIVE",
   };
 
   if (search) {
@@ -397,6 +402,7 @@ async function listOrganizationProducts({ organizationId, page, limit, search })
         description: true,
         price: true,
         imageUrl: true,
+        galleryImages: true,
         category: {
           select: {
             id: true,
@@ -423,7 +429,7 @@ async function getProduct(productId) {
   const product = await prisma.product.findFirst({
     where: {
       id: productId,
-      isActive: true,
+      status: "ACTIVE",
     },
     select: {
       id: true,
@@ -431,6 +437,7 @@ async function getProduct(productId) {
       description: true,
       price: true,
       imageUrl: true,
+      galleryImages: true,
       category: {
         select: {
           id: true,
@@ -465,7 +472,10 @@ async function getProduct(productId) {
     name: product.name,
     description: product.description,
     price: Number(product.price),
-    image: product.imageUrl || null,
+    image: resolvePublicFileUrl(product.imageUrl),
+    galleryImages: (product.galleryImages || [])
+      .map((image) => resolvePublicFileUrl(image))
+      .filter(Boolean),
     quantity: product.inventory?.quantity ?? 0,
     organizationId: product.organization.id,
     categoryId: product.category?.id || null,

@@ -1,4 +1,3 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { Stack, useRootNavigationState, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
@@ -9,11 +8,9 @@ import 'react-native-reanimated';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { CartProvider } from '@/providers/cart-provider';
-import {
-  AUTH_TOKEN_STORAGE_KEY,
-  CustomerSessionProvider,
-  useCustomerSession,
-} from '@/providers/customer-session-provider';
+import { CustomerSessionProvider, useCustomerSession } from '@/providers/customer-session-provider';
+import { NotificationProvider } from '@/providers/notification-provider';
+import { getAccessToken } from '@/services/token.service';
 import { ThemePreferenceProvider } from '@/providers/theme-preference-provider';
 
 export const unstable_settings = {
@@ -50,7 +47,7 @@ function RootNavigator() {
 
     async function checkToken() {
       try {
-        const token = await AsyncStorage.getItem(AUTH_TOKEN_STORAGE_KEY);
+        const token = await getAccessToken();
 
         if (active) {
           setHasStoredToken(Boolean(token));
@@ -108,6 +105,7 @@ function RootNavigator() {
       <Stack.Screen name="index" options={{ headerShown: false }} />
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
       <Stack.Screen name="(auth)" options={{ headerShown: false }} />
+      <Stack.Screen name="notifications/index" options={{ headerShown: false }} />
       <Stack.Screen name="orders/index" options={{ title: 'My orders' }} />
       <Stack.Screen name="orders/[orderId]" options={{ title: 'Order' }} />
       <Stack.Screen name="organizations/index" options={{ title: 'Organizations' }} />
@@ -124,23 +122,25 @@ function AppShell() {
 
   return (
     <CustomerSessionProvider>
-      <CartProvider>
-        <ThemeProvider
-          value={{
-            ...navigationTheme,
-            colors: {
-              ...navigationTheme.colors,
-              background: palette.background,
-              card: palette.surface,
-              border: palette.border,
-              primary: palette.tint,
-              text: palette.text,
-            },
-          }}>
-          <RootNavigator />
-          <StatusBar style={colorScheme === 'dark' ? 'light' : 'dark'} />
-        </ThemeProvider>
-      </CartProvider>
+      <NotificationProvider>
+        <CartProvider>
+          <ThemeProvider
+            value={{
+              ...navigationTheme,
+              colors: {
+                ...navigationTheme.colors,
+                background: palette.background,
+                card: palette.surface,
+                border: palette.border,
+                primary: palette.tint,
+                text: palette.text,
+              },
+            }}>
+            <RootNavigator />
+            <StatusBar style={colorScheme === 'dark' ? 'light' : 'dark'} />
+          </ThemeProvider>
+        </CartProvider>
+      </NotificationProvider>
     </CustomerSessionProvider>
   );
 }

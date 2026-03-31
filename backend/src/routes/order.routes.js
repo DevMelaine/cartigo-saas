@@ -14,6 +14,27 @@ router.get(
   OrderController.listOrders
 );
 
+router.get(
+  "/stats/sales-trend",
+  authMiddleware,
+  authorizeRoles("ADMIN", "MANAGER", "CASHIER", "STAFF"),
+  OrderController.getSalesTrend
+);
+
+router.get(
+  "/stats/overview",
+  authMiddleware,
+  authorizeRoles("ADMIN", "MANAGER", "CASHIER", "STAFF"),
+  OrderController.getOverview
+);
+
+router.get(
+  "/:id/details",
+  authMiddleware,
+  authorizeRoles("ADMIN", "MANAGER", "CASHIER", "STAFF"),
+  OrderController.getOrganizationOrder
+);
+
 router.patch(
   "/:id/status",
   authMiddleware,

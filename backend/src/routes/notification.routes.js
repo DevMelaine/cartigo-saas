@@ -7,6 +7,7 @@ const router = express.Router();
 router.use(notificationAuth);
 
 router.get("/", notificationController.listNotifications);
+router.get("/unread-count", notificationController.getUnreadCount);
 router.patch("/read-all", notificationController.markAllAsRead);
 router.patch("/:id/read", notificationController.markAsRead);
 router.post("/register-device", notificationController.registerDevice);

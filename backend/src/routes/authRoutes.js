@@ -8,7 +8,12 @@ const router = express.Router();
  *   description: Authentication endpoints
  */
 const authController = require("../controllers/authController");
+const authMiddleware = require("../middlewares/authMiddleware");
 const { authLimiter } = require("../middlewares/rateLimiter/authLimiter");
+const {
+  forgotPasswordLimiter,
+  resetPasswordLimiter,
+} = require("../middlewares/rateLimiter/passwordResetLimiter");
 
 /**
  * @swagger
@@ -50,6 +55,12 @@ router.post(
   authController.registerOrganization
 );
 router.post("/login", authLimiter, authController.login);
+router.get("/google", authLimiter, authController.googleAuth);
+router.get("/google/callback", authLimiter, authController.googleCallback);
+router.post("/forgot-password", forgotPasswordLimiter, authController.forgotPassword);
+router.post("/reset-password", resetPasswordLimiter, authController.resetPassword);
 router.post("/refresh-token", authController.refreshToken);
+router.post("/logout", authController.logout);
+router.get("/me", authMiddleware, authController.me);
 
 module.exports = router;

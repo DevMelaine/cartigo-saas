@@ -20,6 +20,7 @@ import { CategoryPill } from '@/components/discovery/category-pill';
 import { OrganizationCard } from '@/components/discovery/organization-card';
 import { Colors, Fonts } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { useNotifications } from '@/providers/notification-provider';
 import { publicService } from '@/services/public.service';
 import type { OrganizationCategory, PublicOrganization } from '@/types/public';
 
@@ -74,11 +75,11 @@ export default function HomeScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const palette = Colors[colorScheme];
   const router = useRouter();
+  const { unreadCount } = useNotifications();
   const sectionListRef = useRef<SectionList<OrganizationRow, DiscoverySection>>(null);
   const categoryRailRef = useRef<ScrollView>(null);
   const pendingCategoryIdRef = useRef<string | null>(null);
   const categoryLayoutsRef = useRef<Record<string, { x: number; width: number }>>({});
-  const notificationCount = 0;
 
   const [categories, setCategories] = useState<OrganizationCategory[]>([]);
   const [organizations, setOrganizations] = useState<PublicOrganization[]>([]);
@@ -404,12 +405,15 @@ export default function HomeScreen() {
         <View style={styles.topBar}>
           <Text style={[styles.brand, { color: palette.accent }]}>Cartigo</Text>
 
-          <Pressable accessibilityRole="button" style={styles.notificationButton}>
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => router.push('/notifications')}
+            style={styles.notificationButton}>
             <MaterialIcons name="notifications-none" size={22} color={palette.text} />
-            {notificationCount > 0 ? (
+            {unreadCount > 0 ? (
               <View style={[styles.notificationBadge, { backgroundColor: palette.text }]}>
                 <Text style={[styles.notificationBadgeText, { color: palette.inverseText }]}>
-                  {notificationCount}
+                  {unreadCount > 99 ? '99+' : unreadCount}
                 </Text>
               </View>
             ) : null}
