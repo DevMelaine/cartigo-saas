@@ -7,13 +7,34 @@ beforeAll(async () => {
 });
 
 afterEach(async () => {
-
-  const tables = ["User", "Organization", "RefreshToken"];
+  const tables = [
+    "DeviceToken",
+    "Notification",
+    "DeliveryJob",
+    "OrderAuditLog",
+    "Payment",
+    "OrderItem",
+    "Order",
+    "CartItem",
+    "Cart",
+    "Inventory",
+    "Product",
+    "Category",
+    "RefreshToken",
+    "PasswordResetToken",
+    "Invitation",
+    "CustomerRefreshToken",
+    "RefreshCustomerToken",
+    "CustomerAuditLog",
+    "User",
+    "Customer",
+    "Organization",
+    "OrganizationCategory"
+  ];
 
   for (const table of tables) {
     await prisma.$executeRawUnsafe(`TRUNCATE TABLE "${table}" CASCADE;`);
   }
-
 });
 
 afterAll(async () => {

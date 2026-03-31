@@ -1,6 +1,9 @@
 const request = require("supertest");
 const jwt = require("jsonwebtoken");
 const { v4: uuidv4 } = require("uuid");
+const {
+  ensureOrganizationCategory,
+} = require("./organizationCategoryHelper");
 
 // generate a unique email for test users to avoid collisions when
 // several accounts are created within the same millisecond.
@@ -11,12 +14,14 @@ function makeTestEmail() {
 async function getAuthToken(app) {
   const email = makeTestEmail();
   const password = "password123";
+  const category = await ensureOrganizationCategory();
 
   // create organization and admin user
   await request(app)
     .post("/api/auth/register-organization")
     .send({
       name: `Org ${Date.now()}`,
+      categoryId: category.id,
       adminName: "Admin",
       email,
       password,

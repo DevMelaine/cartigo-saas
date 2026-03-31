@@ -1,6 +1,8 @@
 const request = require("supertest");
+const jwt = require("jsonwebtoken");
 const app = require("../../src/app");
 const { getAuthToken, getTokenForRole } = require("../helpers/authHelper");
+const { ensureProductCategory } = require("../helpers/productCategoryHelper");
 
 /**
  * Product creation tests
@@ -12,6 +14,7 @@ const { getAuthToken, getTokenForRole } = require("../helpers/authHelper");
 describe("POST /api/products", () => {
   it("should create product successfully with valid data", async () => {
     const token = await getAuthToken(app);
+    const category = await ensureProductCategory(token, "Food");
 
     const res = await request(app)
       .post("/api/products")
@@ -23,7 +26,7 @@ describe("POST /api/products", () => {
         costPrice: 15.0,
         stock: 100,
         sku: "RICE-001",
-        category: "Food",
+        categoryId: category.id,
         lowStockThreshold: 20,
       })
       .expect(201);
@@ -34,8 +37,48 @@ describe("POST /api/products", () => {
     expect(res.body.data.sku).toBe("RICE-001");
   });
 
+  it("should create product successfully with image URLs from the upload flow", async () => {
+    const token = await getAuthToken(app);
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const category = await ensureProductCategory(token, "Food");
+
+    const res = await request(app)
+      .post("/api/products")
+      .set("Authorization", `Bearer ${token}`)
+      .send({
+        name: "Rice 5kg",
+        description: "Pack shot with direct upload URL",
+        price: 18.5,
+        stock: 42,
+        sku: "RICE-IMAGE-001",
+        categoryId: category.id,
+        imageUrl: `products/${decoded.organizationId}/front-cover.png`,
+        galleryImages: [
+          `products/${decoded.organizationId}/detail-1.png`,
+          `products/${decoded.organizationId}/detail-2.png`,
+        ],
+      })
+      .expect(201);
+
+    expect(res.body.success).toBe(true);
+    expect(res.body.data.imageUrl).toContain(
+      `/products/${decoded.organizationId}/front-cover.png`
+    );
+    expect(res.body.data.galleryImages).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining(
+          `/products/${decoded.organizationId}/detail-1.png`
+        ),
+        expect.stringContaining(
+          `/products/${decoded.organizationId}/detail-2.png`
+        ),
+      ])
+    );
+  });
+
   it("should convert SKU to uppercase", async () => {
     const token = await getAuthToken(app);
+    const category = await ensureProductCategory(token);
 
     const res = await request(app)
       .post("/api/products")
@@ -45,6 +88,7 @@ describe("POST /api/products", () => {
         price: 10,
         stock: 50,
         sku: "prod-001",
+        categoryId: category.id,
       })
       .expect(201);
 
@@ -53,6 +97,7 @@ describe("POST /api/products", () => {
 
   it("should fail with duplicate SKU in same organization", async () => {
     const token = await getAuthToken(app);
+    const category = await ensureProductCategory(token);
 
     await request(app)
       .post("/api/products")
@@ -62,6 +107,7 @@ describe("POST /api/products", () => {
         price: 10,
         stock: 50,
         sku: "DUP-001",
+        categoryId: category.id,
       })
       .expect(201);
 
@@ -73,6 +119,7 @@ describe("POST /api/products", () => {
         price: 15,
         stock: 30,
         sku: "DUP-001",
+        categoryId: category.id,
       })
       .expect(409);
 
@@ -83,6 +130,8 @@ describe("POST /api/products", () => {
   it("should allow same SKU in different organizations", async () => {
     const token1 = await getAuthToken(app);
     const token2 = await getAuthToken(app);
+    const category1 = await ensureProductCategory(token1);
+    const category2 = await ensureProductCategory(token2);
 
     await request(app)
       .post("/api/products")
@@ -92,6 +141,7 @@ describe("POST /api/products", () => {
         price: 10,
         stock: 50,
         sku: "SHARED-001",
+        categoryId: category1.id,
       })
       .expect(201);
 
@@ -103,6 +153,7 @@ describe("POST /api/products", () => {
         price: 15,
         stock: 30,
         sku: "SHARED-001",
+        categoryId: category2.id,
       })
       .expect(201);
 
@@ -127,6 +178,7 @@ describe("POST /api/products", () => {
 
   it("should fail with negative price", async () => {
     const token = await getAuthToken(app);
+    const category = await ensureProductCategory(token);
 
     const res = await request(app)
       .post("/api/products")
@@ -136,6 +188,7 @@ describe("POST /api/products", () => {
         price: -5,
         stock: 50,
         sku: "NEG-001",
+        categoryId: category.id,
       })
       .expect(400);
 
@@ -146,6 +199,7 @@ describe("POST /api/products", () => {
 
   it("should fail with negative stock", async () => {
     const token = await getAuthToken(app);
+    const category = await ensureProductCategory(token);
 
     const res = await request(app)
       .post("/api/products")
@@ -155,6 +209,7 @@ describe("POST /api/products", () => {
         price: 10,
         stock: -10,
         sku: "NEGSTOCK-001",
+        categoryId: category.id,
       })
       .expect(400);
 
@@ -165,6 +220,7 @@ describe("POST /api/products", () => {
 
   it("should fail with cost price greater than selling price", async () => {
     const token = await getAuthToken(app);
+    const category = await ensureProductCategory(token);
 
     const res = await request(app)
       .post("/api/products")
@@ -175,6 +231,7 @@ describe("POST /api/products", () => {
         costPrice: 15,
         stock: 50,
         sku: "COST-001",
+        categoryId: category.id,
       })
       .expect(400);
 
@@ -185,6 +242,7 @@ describe("POST /api/products", () => {
 
   it("should fail with invalid SKU format", async () => {
     const token = await getAuthToken(app);
+    const category = await ensureProductCategory(token);
 
     const res = await request(app)
       .post("/api/products")
@@ -194,6 +252,7 @@ describe("POST /api/products", () => {
         price: 10,
         stock: 50,
         sku: "sku@#$%", // invalid characters
+        categoryId: category.id,
       })
       .expect(400);
 
@@ -204,6 +263,7 @@ describe("POST /api/products", () => {
 
   it("should fail with invalid image URL", async () => {
     const token = await getAuthToken(app);
+    const category = await ensureProductCategory(token);
 
     const res = await request(app)
       .post("/api/products")
@@ -213,17 +273,21 @@ describe("POST /api/products", () => {
         price: 10,
         stock: 50,
         sku: "URL-001",
+        categoryId: category.id,
         imageUrl: "not-a-url",
       })
       .expect(400);
 
     expect(res.body.errors).toEqual(
-      expect.arrayContaining([expect.stringContaining("valid URL")])
+      expect.arrayContaining([
+        expect.stringContaining("valid storage path or HTTP URL"),
+      ])
     );
   });
 
   it("should forbid STAFF from creating products", async () => {
     const token = await getTokenForRole(app, "STAFF");
+    const category = await ensureProductCategory(token);
 
     const res = await request(app)
       .post("/api/products")
@@ -233,6 +297,7 @@ describe("POST /api/products", () => {
         price: 10,
         stock: 10,
         sku: "EMP-001",
+        categoryId: category.id,
       })
       .expect(403);
 

@@ -44,6 +44,14 @@ router.get("/stats/overview", productController.getProductStats);
 router.get("/stats/low-stock", productController.getLowStockProducts);
 
 /**
+ * GET /api/products/stats/top-performers
+ * Get best performing products ranked by revenue and sales
+ * Query: ?limit=5
+ * Response: { success, data, count }
+ */
+router.get("/stats/top-performers", productController.getTopPerformingProducts);
+
+/**
  * GET /api/products/:id
  * Get a single product by ID
  * Response: { success, data }
@@ -59,10 +67,25 @@ router.get("/:id", productController.getProductById);
 router.put("/:id", productController.updateProduct);
 
 /**
+ * PATCH /api/products/:id/status
+ * Update product operational status
+ * Body: { status }
+ * Response: { success, message, data }
+ */
+router.patch("/:id/status", productController.updateProductStatus);
+
+/**
  * DELETE /api/products/:id
- * Soft delete a product (set isActive to false)
+ * Archive a product (soft delete)
  * Response: { success, message }
  */
 router.delete("/:id", productController.deleteProduct);
+
+/**
+ * DELETE /api/products/:id/permanent
+ * Permanently delete an archived product
+ * Response: { success, message, data }
+ */
+router.delete("/:id/permanent", productController.permanentlyDeleteProduct);
 
 module.exports = router;

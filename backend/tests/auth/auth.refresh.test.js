@@ -1,47 +1,42 @@
 const request = require("supertest");
-const app = require("../../src/app");
-const { seedTestUser } = require("../seed");
-const { PrismaClient } = require("@prisma/client");
-const tokenService = require("../../src/services/tokenService");
 const bcrypt = require("bcrypt");
+const app = require("../../src/app");
+const tokenService = require("../../src/services/tokenService");
+const {
+  createTestOrganization,
+  ensureOrganizationCategory,
+} = require("../helpers/organizationCategoryHelper");
 
 let prisma;
-let user;
-let organization;
 
 beforeAll(() => {
   prisma = global.prisma;
 });
 
 beforeEach(async () => {
-
   const password = await bcrypt.hash("password123", 10);
-
-  // créer organisation
-  organization = await prisma.organization.create({
-    data: {
-      name: "Test Organization"
-    }
+  const organization = await createTestOrganization({
+    name: "Test Organization",
   });
 
-  // créer utilisateur lié à l'organisation
-  user = await prisma.user.create({
+  await prisma.user.create({
     data: {
       name: "Refresh Test User",
       email: "refresh@test.com",
       password,
       role: "ADMIN",
-      organizationId: organization.id
-    }
+      organizationId: organization.id,
+    },
   });
-
 });
 
-// helper that registers a user and returns login tokens
 async function loginAndGetRefresh() {
   const email = `refresh${Date.now()}@test.com`;
+  const category = await ensureOrganizationCategory();
+
   await request(app).post("/api/auth/register-organization").send({
     name: "Refresh Org",
+    categoryId: category.id,
     adminName: "Refresh Admin",
     email,
     password: "password123",
@@ -80,20 +75,20 @@ describe("POST /api/auth/refresh-token", () => {
   });
 
   it("should fail if refresh token expired", async () => {
-    // create a token manually and expire it
     const email = `expired${Date.now()}@test.com`;
+    const category = await ensureOrganizationCategory();
+
     await request(app).post("/api/auth/register-organization").send({
       name: "Expire Org",
+      categoryId: category.id,
       adminName: "Expire Admin",
       email,
       password: "password123",
     });
 
     const user = await prisma.user.findUnique({ where: { email } });
-    // create token pair via service
     const { refreshToken } = await tokenService.createTokenPairForUser(user);
 
-    // mark token record expired
     await prisma.refreshToken.updateMany({
       where: {},
       data: { expiresAt: new Date(Date.now() - 1000) },
