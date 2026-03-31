@@ -2,6 +2,7 @@ module.exports = {
   testEnvironment: "node",
   verbose: true,
   testMatch: ["**/tests/**/*.test.js"],
+  setupFiles: ["dotenv/config"],
   setupFilesAfterEnv: ["<rootDir>/tests/jest.setup.js"],
   clearMocks: true,
   bail: false,

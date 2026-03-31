@@ -1,5 +1,6 @@
 const request = require("supertest");
 const app = require("../../src/app");
+const { seedTestUser } = require("../seed");
 
 // helper to register, login and return access token
 async function createAndLogin() {

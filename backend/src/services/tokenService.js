@@ -6,7 +6,8 @@ const {
   getRefreshTokenExpiryDate,
 } = require("../utils/generateRefreshToken");
 
-const prisma = new PrismaClient();
+// reuse global prisma if created by jest.setup
+const prisma = global.prisma || new PrismaClient();
 
 function hashToken(token) {
   return crypto.createHash("sha256").update(token).digest("hex");

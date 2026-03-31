@@ -51,12 +51,26 @@ enum Role {
 model Product {
   id             String   @id @default(uuid())
   name           String
-  price          Float
-  stock          Int
+  description    String?
+  price          Decimal  @db.Decimal(10, 2)
+  costPrice      Decimal? @db.Decimal(10, 2)
+  stock          Int      @default(0)
+  sku            String
+  barcode        String?
+  category       String?
+  imageUrl       String?
+  isActive       Boolean  @default(true)
+  lowStockThreshold Int?
   createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
   organizationId String
-  organization   Organization @relation(fields: [organizationId], references: [id])
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, sku])
+  @@index([organizationId])
+  @@index([name])
+  @@index([createdAt])
 }
 
 model Order {
