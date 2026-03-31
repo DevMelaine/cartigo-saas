@@ -40,7 +40,7 @@ async function getAuthToken(app) {
  * created by an ADMIN token and forge a token payload directly.
  *
  * @param {Express.Application} app
- * @param {string} role one of ADMIN, MANAGER, EMPLOYEE
+ * @param {string} role one of ADMIN, MANAGER, CASHIER, STAFF
  */
 async function getTokenForRole(app, role = "ADMIN") {
   if (role === "ADMIN") {

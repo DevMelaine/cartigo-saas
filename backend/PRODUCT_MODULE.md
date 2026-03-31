@@ -393,7 +393,7 @@ where: {
 
 ```javascript
 const ADMIN    = ["ADMIN", "MANAGER"]        // Can CRUD
-const EMPLOYEE = ["EMPLOYEE"]                // Read-only
+const STAFF    = ["CASHIER", "STAFF"]        // Read-only (non-admin)
 ```
 
 **Enforcement per endpoint:**

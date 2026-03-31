@@ -33,8 +33,8 @@ describe("GET /api/products", () => {
     await request(app).get("/api/products").expect(401);
   });
 
-  it("should allow EMPLOYEE to list products", async () => {
-    const token = await getTokenForRole(app, "EMPLOYEE");
+  it("should allow STAFF to list products", async () => {
+    const token = await getTokenForRole(app, "STAFF");
     await request(app).get("/api/products").set("Authorization", `Bearer ${token}`).expect(200);
   });
   it("should get products with default pagination", async () => {
