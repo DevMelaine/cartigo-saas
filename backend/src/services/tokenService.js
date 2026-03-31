@@ -74,8 +74,67 @@ async function rotateRefreshToken(oldRefreshToken) {
   };
 }
 
+// customer-specific token helpers
+async function createTokenPairForCustomer(customer) {
+  const payload = {
+    userId: customer.id,
+    role: "CUSTOMER",
+  };
+
+  const accessToken = generateAccessToken(payload);
+
+  const refreshTokenPlain = generateRefreshTokenString();
+  const refreshTokenHash = hashToken(refreshTokenPlain);
+  const expiresAt = getRefreshTokenExpiryDate();
+
+  await prisma.customerRefreshToken.create({
+    data: {
+      tokenHash: refreshTokenHash,
+      customerId: customer.id,
+      expiresAt,
+    },
+  });
+
+  return {
+    accessToken,
+    refreshToken: refreshTokenPlain,
+  };
+}
+
+async function rotateCustomerRefreshToken(oldRefreshToken) {
+  const refreshTokenHash = hashToken(oldRefreshToken);
+
+  const existing = await prisma.customerRefreshToken.findFirst({
+    where: {
+      tokenHash: refreshTokenHash,
+      expiresAt: {
+        gt: new Date(),
+      },
+    },
+    include: {
+      customer: true,
+    },
+  });
+
+  if (!existing || !existing.customer) {
+    const error = new Error("Invalid refresh token");
+    error.statusCode = 401;
+    throw error;
+  }
+
+  await prisma.customerRefreshToken.delete({ where: { id: existing.id } });
+
+  const tokenPair = await createTokenPairForCustomer(existing.customer);
+
+  return {
+    customer: existing.customer,
+    ...tokenPair,
+  };
+}
 module.exports = {
   createTokenPairForUser,
+  createTokenPairForCustomer,
   rotateRefreshToken,
+  rotateCustomerRefreshToken,
 };
 

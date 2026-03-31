@@ -14,14 +14,14 @@ datasource db {
 }
 
 model Organization {
-  id         String   @id @default(uuid())
+  id        String   @id @default(uuid())
   name      String
   address   String?
   createdAt DateTime @default(now())
 
-  users     User[]
-  products  Product[]
-  orders    Order[]
+  users    User[]
+  products Product[]
+  orders   Order[]
 }
 
 model User {
@@ -38,7 +38,7 @@ model User {
   failedLoginAttempts Int       @default(0)
   lockUntil           DateTime?
 
-  organization   Organization? @relation(fields: [organizationId], references: [id])
+  organization Organization? @relation(fields: [organizationId], references: [id])
 
   refreshTokens RefreshToken[]
   auditLogs     AuditLog[]
@@ -53,21 +53,50 @@ enum Role {
   CASHIER
   STAFF
 }
+
+model Customer {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  password  String
+  name      String
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  failedLoginAttempts Int       @default(0)
+  lockUntil           DateTime?
+
+  refreshCustomerToken RefreshCustomerToken[]
+  customerAuditLog     CustomerAuditLog[]
+  CustomerRefreshToken CustomerRefreshToken[]
+}
+
+model CustomerRefreshToken {
+  id        String   @id @default(uuid())
+  tokenHash String   @unique
+  expiresAt DateTime
+
+  customerId String
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+}
+
 model Product {
-  id             String   @id @default(uuid())
-  name           String
-  description    String?
-  price          Decimal  @db.Decimal(10, 2)
-  costPrice      Decimal? @db.Decimal(10, 2)
-  stock          Int      @default(0)
-  sku            String
-  barcode        String?
-  category       String?
-  imageUrl       String?
-  isActive       Boolean  @default(true)
+  id                String   @id @default(uuid())
+  name              String
+  description       String?
+  price             Decimal  @db.Decimal(10, 2)
+  costPrice         Decimal? @db.Decimal(10, 2)
+  stock             Int      @default(0)
+  sku               String
+  barcode           String?
+  category          String?
+  imageUrl          String?
+  isActive          Boolean  @default(true)
   lowStockThreshold Int?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
@@ -79,10 +108,10 @@ model Product {
 }
 
 model Order {
-  id             String   @id @default(uuid())
-  total          Float
-  status         String
-  createdAt      DateTime @default(now())
+  id        String   @id @default(uuid())
+  total     Float
+  status    String
+  createdAt DateTime @default(now())
 
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id])
@@ -97,6 +126,15 @@ model RefreshToken {
   createdAt DateTime @default(now())
 }
 
+model RefreshCustomerToken {
+  id         String   @id @default(uuid())
+  tokenHash  String
+  customerId String
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+}
+
 model AuditLog {
   id             String   @id @default(uuid())
   userId         String?
@@ -106,4 +144,14 @@ model AuditLog {
   ipAddress      String?
   userAgent      String?
   createdAt      DateTime @default(now())
+}
+
+model CustomerAuditLog {
+  id         String    @id @default(uuid())
+  customerId String?
+  customer   Customer? @relation(fields: [customerId], references: [id])
+  action     String
+  ipAddress  String?
+  userAgent  String?
+  createdAt  DateTime  @default(now())
 }
