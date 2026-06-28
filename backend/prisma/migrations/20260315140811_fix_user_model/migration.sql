@@ -1,0 +1,2 @@
+-- Duplicate migration left intentionally empty.
+-- The actual order lifecycle and payment changes are applied in 20260315140236_fix_user_model.
