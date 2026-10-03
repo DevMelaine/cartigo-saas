@@ -32,6 +32,10 @@ function createError(message, statusCode = 400, details) {
   return error;
 }
 
+const CUSTOMER_STATUS_FILTERS = new Set(["all", "active", "inactive"]);
+const CUSTOMER_SORT_FIELDS = new Set(["lastOrderAt", "totalSpent", "totalOrders"]);
+const CUSTOMER_SORT_ORDERS = new Set(["asc", "desc"]);
+
 function mapOrganization(organization) {
   return {
     id: organization.id,
@@ -245,7 +249,228 @@ async function updateOrganization(organizationId, data) {
   return mapOrganization(organization);
 }
 
+function parsePositiveInt(value, fallback) {
+  const parsed = Number.parseInt(String(value ?? ""), 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function normalizeCustomerFilters(rawFilters = {}) {
+  const status = typeof rawFilters.status === "string" ? rawFilters.status : "all";
+  const sortBy =
+    typeof rawFilters.sortBy === "string"
+      ? rawFilters.sortBy
+      : typeof rawFilters.sort === "string"
+        ? rawFilters.sort
+        : "lastOrderAt";
+  const sortOrder =
+    typeof rawFilters.sortOrder === "string"
+      ? rawFilters.sortOrder
+      : typeof rawFilters.order === "string"
+        ? rawFilters.order
+        : "desc";
+  const search =
+    typeof rawFilters.search === "string" && rawFilters.search.trim().length > 0
+      ? rawFilters.search.trim()
+      : undefined;
+
+  return {
+    page: parsePositiveInt(rawFilters.page, 1),
+    limit: parsePositiveInt(rawFilters.limit, 10),
+    search,
+    status: CUSTOMER_STATUS_FILTERS.has(status) ? status : "all",
+    sortBy: CUSTOMER_SORT_FIELDS.has(sortBy) ? sortBy : "lastOrderAt",
+    sortOrder: CUSTOMER_SORT_ORDERS.has(sortOrder) ? sortOrder : "desc",
+  };
+}
+
+function toComparableNumber(value) {
+  if (value === null || value === undefined) {
+    return 0;
+  }
+
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? value : 0;
+  }
+
+  return Number.parseFloat(value.toString()) || 0;
+}
+
+function resolveCustomerActiveState(lastOrderAt, thresholdDate) {
+  if (!lastOrderAt) {
+    return false;
+  }
+
+  const lastOrderDate = new Date(lastOrderAt);
+  return !Number.isNaN(lastOrderDate.getTime()) && lastOrderDate >= thresholdDate;
+}
+
+function compareCustomers(left, right, sortBy, sortOrder) {
+  let comparison = 0;
+
+  switch (sortBy) {
+    case "totalSpent":
+      comparison = left.totalSpent - right.totalSpent;
+      break;
+    case "totalOrders":
+      comparison = left.totalOrders - right.totalOrders;
+      break;
+    case "lastOrderAt":
+    default: {
+      const leftTime = left.lastOrderAt ? new Date(left.lastOrderAt).getTime() : 0;
+      const rightTime = right.lastOrderAt ? new Date(right.lastOrderAt).getTime() : 0;
+      comparison = leftTime - rightTime;
+      break;
+    }
+  }
+
+  if (comparison === 0) {
+    comparison = left.name.localeCompare(right.name);
+  }
+
+  if (comparison === 0) {
+    comparison = left.id.localeCompare(right.id);
+  }
+
+  return sortOrder === "asc" ? comparison : comparison * -1;
+}
+
+async function listOrganizationCustomers(organizationId, rawFilters = {}) {
+  const filters = normalizeCustomerFilters(rawFilters);
+  const activeThreshold = new Date();
+  activeThreshold.setDate(activeThreshold.getDate() - 30);
+
+  const orderWhere = {
+    organizationId,
+    ...(filters.search
+      ? {
+          customer: {
+            is: {
+              OR: [
+                { name: { contains: filters.search, mode: "insensitive" } },
+                { email: { contains: filters.search, mode: "insensitive" } },
+              ],
+            },
+          },
+        }
+      : {}),
+  };
+
+  const groupedOrders = await prisma.order.groupBy({
+    by: ["customerId"],
+    where: orderWhere,
+    _count: {
+      _all: true,
+    },
+    _sum: {
+      total: true,
+    },
+    _max: {
+      createdAt: true,
+    },
+  });
+
+  if (groupedOrders.length === 0) {
+    return {
+      data: [],
+      pagination: {
+        page: filters.page,
+        limit: filters.limit,
+        total: 0,
+        totalPages: 0,
+      },
+      summary: {
+        totalClients: 0,
+        activeClients: 0,
+        totalRevenue: 0,
+        averageOrderValue: 0,
+      },
+    };
+  }
+
+  const customers = await prisma.customer.findMany({
+    where: {
+      id: {
+        in: groupedOrders.map((entry) => entry.customerId),
+      },
+    },
+    select: {
+      id: true,
+      name: true,
+      email: true,
+    },
+  });
+
+  const customerMap = new Map(customers.map((customer) => [customer.id, customer]));
+
+  const aggregatedCustomers = groupedOrders
+    .map((entry) => {
+      const customer = customerMap.get(entry.customerId);
+
+      if (!customer) {
+        return null;
+      }
+
+      const lastOrderAt = entry._max.createdAt ? entry._max.createdAt.toISOString() : null;
+      const totalSpent = toComparableNumber(entry._sum.total);
+      const totalOrders = entry._count._all ?? 0;
+      const isActive = resolveCustomerActiveState(lastOrderAt, activeThreshold);
+
+      return {
+        id: customer.id,
+        name: customer.name,
+        email: customer.email,
+        phone: null,
+        totalOrders,
+        totalSpent,
+        lastOrderAt,
+        isActive,
+      };
+    })
+    .filter(Boolean);
+
+  const filteredCustomers =
+    filters.status === "all"
+      ? aggregatedCustomers
+      : aggregatedCustomers.filter((customer) =>
+          filters.status === "active" ? customer.isActive : !customer.isActive
+        );
+
+  filteredCustomers.sort((left, right) =>
+    compareCustomers(left, right, filters.sortBy, filters.sortOrder)
+  );
+
+  const totalClients = filteredCustomers.length;
+  const totalRevenue = filteredCustomers.reduce(
+    (sum, customer) => sum + customer.totalSpent,
+    0
+  );
+  const totalOrders = filteredCustomers.reduce(
+    (sum, customer) => sum + customer.totalOrders,
+    0
+  );
+  const totalPages = totalClients > 0 ? Math.ceil(totalClients / filters.limit) : 0;
+  const offset = (filters.page - 1) * filters.limit;
+  const paginatedCustomers = filteredCustomers.slice(offset, offset + filters.limit);
+
+  return {
+    data: paginatedCustomers,
+    pagination: {
+      page: filters.page,
+      limit: filters.limit,
+      total: totalClients,
+      totalPages,
+    },
+    summary: {
+      totalClients,
+      activeClients: filteredCustomers.filter((customer) => customer.isActive).length,
+      totalRevenue,
+      averageOrderValue: totalOrders > 0 ? totalRevenue / totalOrders : 0,
+    },
+  };
+}
+
 module.exports = {
   getOrganizationProfile,
   updateOrganization,
+  listOrganizationCustomers,
 };

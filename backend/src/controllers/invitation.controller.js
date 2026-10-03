@@ -27,6 +27,32 @@ async function listInvitations(req, res) {
   }
 }
 
+async function resendInvitation(req, res) {
+  try {
+    const invitation = await invitationService.resendInvitation(req.params.id, req.user);
+    return res.status(200).json({ success: true, data: invitation });
+  } catch (err) {
+    const status = err.statusCode || 500;
+    return res.status(status).json({
+      success: false,
+      message: err.message,
+    });
+  }
+}
+
+async function deleteInvitation(req, res) {
+  try {
+    const result = await invitationService.deleteInvitation(req.params.id, req.user);
+    return res.status(200).json({ success: true, message: result.message });
+  } catch (err) {
+    const status = err.statusCode || 500;
+    return res.status(status).json({
+      success: false,
+      message: err.message,
+    });
+  }
+}
+
 async function acceptInvitation(req, res) {
   try {
     const result = await invitationService.acceptInvitation(req.body);
@@ -44,5 +70,7 @@ async function acceptInvitation(req, res) {
 module.exports = {
   createInvitation,
   listInvitations,
+  resendInvitation,
+  deleteInvitation,
   acceptInvitation,
 };

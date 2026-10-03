@@ -1,4 +1,4 @@
-const INVITABLE_ROLES = ["MANAGER", "CASHIER", "STAFF"];
+const INVITABLE_ROLES = ["ADMIN", "MANAGER", "CASHIER", "STAFF"];
 
 function validateCreateInvitation(body) {
   const errors = [];

@@ -4,7 +4,7 @@
  * migrate to Joi/Zod if desired.
  */
 
-const validRoles = ["MANAGER", "CASHIER", "STAFF"];
+const validRoles = ["ADMIN", "MANAGER", "CASHIER", "STAFF"];
 
 function validateCreateUser(body) {
   const errors = [];

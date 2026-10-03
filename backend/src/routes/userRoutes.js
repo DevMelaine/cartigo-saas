@@ -22,5 +22,7 @@ router.put("/:id", authorizeRoles("ADMIN"), userController.updateUser);
 
 // delete (soft) user - only ADMIN
 router.delete("/:id", authorizeRoles("ADMIN"), userController.deleteUser);
+// delete (permanent) user - only ADMIN
+router.delete("/:id/permanent", authorizeRoles("ADMIN"), userController.deleteUserPermanently);
 
 module.exports = router;

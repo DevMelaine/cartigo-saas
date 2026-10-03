@@ -11,7 +11,7 @@ import type {
 const invitationSchema = z.object({
   id: z.string().min(1),
   email: z.string().email(),
-  role: z.enum(["MANAGER", "CASHIER", "STAFF"]),
+  role: z.enum(["ADMIN", "MANAGER", "CASHIER", "STAFF"]),
   organizationId: z.string().min(1),
   status: z.enum(["PENDING", "ACCEPTED", "EXPIRED"]),
   expiresAt: z.string(),
@@ -28,7 +28,7 @@ const invitationListEnvelopeSchema = z.object({
 
 const sendInvitationInputSchema = z.object({
   email: z.string().trim().email(),
-  role: z.enum(["MANAGER", "CASHIER", "STAFF"]),
+  role: z.enum(["ADMIN", "MANAGER", "CASHIER", "STAFF"]),
 });
 
 const acceptInvitationInputSchema = z.object({
@@ -100,4 +100,21 @@ export async function acceptInvitation(
   });
 
   return acceptInvitationResponseSchema.parse(data) satisfies AcceptInvitationResponse;
+}
+
+export async function resendInvitation(invitationId: string): Promise<Invitation> {
+  const data = await apiRequest<unknown>(`/invitations/${invitationId}/resend`, {
+    method: "POST",
+  });
+
+  return invitationSchema.parse(data) satisfies Invitation;
+}
+
+export async function deleteInvitation(invitationId: string): Promise<{ message: string }> {
+  const payload = await apiRequestRaw<unknown>(`/invitations/${invitationId}`, {
+    method: "DELETE",
+  });
+
+  const parsed = z.object({ success: z.boolean(), message: z.string().min(1) }).parse(payload);
+  return { message: parsed.message };
 }

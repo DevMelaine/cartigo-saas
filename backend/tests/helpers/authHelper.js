@@ -1,5 +1,4 @@
 const request = require("supertest");
-const jwt = require("jsonwebtoken");
 const { v4: uuidv4 } = require("uuid");
 const {
   ensureOrganizationCategory,
@@ -41,8 +40,8 @@ async function getAuthToken(app) {
 
 /**
  * Obtain a JWT for a given role. ADMIN returns a fresh token by
- * registering a new organization; other roles reuse the organization
- * created by an ADMIN token and forge a token payload directly.
+ * registering a new organization; other roles are created as real users
+ * in that same organization and then authenticated normally.
  *
  * @param {Express.Application} app
  * @param {string} role one of ADMIN, MANAGER, CASHIER, STAFF
@@ -52,24 +51,31 @@ async function getTokenForRole(app, role = "ADMIN") {
     return getAuthToken(app);
   }
 
-  // create base organization by getting an admin token
   const adminToken = await getAuthToken(app);
-  const decoded = jwt.verify(adminToken, process.env.JWT_SECRET);
-  const organizationId = decoded.organizationId;
+  const email = makeTestEmail();
+  const password = "password123";
 
-  const fakeUserId = uuidv4();
+  await request(app)
+    .post("/api/users")
+    .set("Authorization", `Bearer ${adminToken}`)
+    .send({
+      email,
+      password,
+      name: `${role} Test User`,
+      role,
+    })
+    .expect(201);
 
-  // sign a token for the requested role; we don't need a real user record
-  const expiresIn = process.env.JWT_ACCESS_EXPIRES_IN || "15m";
-  const secret = process.env.JWT_ACCESS_SECRET || process.env.JWT_SECRET;
+  const loginResponse = await request(app)
+    .post("/api/auth/login")
+    .send({ email, password })
+    .expect(200);
 
-  const token = jwt.sign(
-    { userId: fakeUserId, organizationId, role }, 
-    secret,
-    { expiresIn }
-  );
+  if (!loginResponse.body?.data?.accessToken) {
+    throw new Error("Role login failed in test helper: " + JSON.stringify(loginResponse.body));
+  }
 
-  return token;
+  return loginResponse.body.data.accessToken;
 }
 
 module.exports = { getAuthToken, getTokenForRole };

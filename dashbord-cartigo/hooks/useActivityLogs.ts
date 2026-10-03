@@ -23,9 +23,9 @@ function defaultResponse(filters: ActivityLogFilters): ActivityLogResponse {
     filterOptions: {
       actions: [],
       users: [],
-      types: [{ value: "order", label: "Commandes" }],
+      types: [{ value: "order", label: "Activites" }],
     },
-    source: "order-audit-logs",
+    source: "activity-logs",
   };
 }
 

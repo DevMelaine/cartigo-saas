@@ -46,6 +46,23 @@ describe("DELETE /api/users/:id", () => {
     expect(res.body.data.every((u) => u.id !== user.id)).toBe(true);
   });
 
+  it("soft deleted user is returned in the inactive filter", async () => {
+    const admin = await getAuthToken(app);
+    const user = await createStaff(admin);
+
+    await request(app)
+      .delete(`/api/users/${user.id}`)
+      .set("Authorization", `Bearer ${admin}`)
+      .expect(200);
+
+    const res = await request(app)
+      .get("/api/users?status=inactive")
+      .set("Authorization", `Bearer ${admin}`)
+      .expect(200);
+
+    expect(res.body.data.some((u) => u.id === user.id)).toBe(true);
+  });
+
   it("cannot delete non-existent user", async () => {
     const admin = await getAuthToken(app);
     const res = await request(app)
@@ -64,5 +81,29 @@ describe("DELETE /api/users/:id", () => {
       .delete(`/api/users/${user.id}`)
       .set("Authorization", `Bearer ${t2}`)
       .expect(404);
+  });
+
+  it("ADMIN can permanently delete an inactive user", async () => {
+    const admin = await getAuthToken(app);
+    const user = await createStaff(admin);
+
+    await request(app)
+      .delete(`/api/users/${user.id}`)
+      .set("Authorization", `Bearer ${admin}`)
+      .expect(200);
+
+    const permanentDeleteResponse = await request(app)
+      .delete(`/api/users/${user.id}/permanent`)
+      .set("Authorization", `Bearer ${admin}`)
+      .expect(200);
+
+    expect(permanentDeleteResponse.body.success).toBe(true);
+
+    const inactiveListResponse = await request(app)
+      .get("/api/users?status=inactive")
+      .set("Authorization", `Bearer ${admin}`)
+      .expect(200);
+
+    expect(inactiveListResponse.body.data.some((u) => u.id === user.id)).toBe(false);
   });
 });

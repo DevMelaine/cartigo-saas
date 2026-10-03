@@ -3,14 +3,19 @@
 import { useMemo, useState } from "react";
 import {
   LoaderCircle,
+  Mail,
+  RefreshCw,
   Search,
   ShieldCheck,
+  Trash2,
   UserPlus,
+  UserCheck,
   Users,
 } from "lucide-react";
 import { toast } from "sonner";
 
 import { Can } from "@/components/auth/Can";
+import { InviteUserDialog } from "@/components/users/invite-user-dialog";
 import { UserFormDialog } from "@/components/users/user-form-dialog";
 import {
   AlertDialog,
@@ -27,6 +32,13 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table,
@@ -38,10 +50,18 @@ import {
 } from "@/components/ui/table";
 import { useAuth } from "@/hooks/useAuth";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
+import { useInvitationMutations, useInvitations } from "@/hooks/useInvitations";
 import { useUserMutations, useUsers } from "@/hooks/useUsers";
-import type { OrganizationUser, UserFormValues } from "@/types/user";
+import { appLogger } from "@/lib/logger";
+import type { Invitation, InvitationRole } from "@/types/invitation";
+import type { OrganizationUser, UserFormValues, UserStatusFilter } from "@/types/user";
 
 const PAGE_SIZE = 10;
+const STATUS_OPTIONS: Array<{ value: "active" | "pending" | "inactive"; label: string }> = [
+  { value: "active", label: "Actifs" },
+  { value: "pending", label: "En attente" },
+  { value: "inactive", label: "Desactives" },
+];
 
 function formatDate(value: string) {
   const date = new Date(value);
@@ -62,10 +82,12 @@ function getErrorMessage(error: unknown) {
 }
 
 export function UserManagementPage() {
-  const { organization, hasPermission } = useAuth();
+  const { organization, hasPermission, role } = useAuth();
   const [page, setPage] = useState(1);
   const [searchInput, setSearchInput] = useState("");
+  const [statusFilter, setStatusFilter] = useState<"active" | "pending" | "inactive">("active");
   const [isFormOpen, setIsFormOpen] = useState(false);
+  const [isInviteOpen, setIsInviteOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<OrganizationUser | null>(null);
 
   const debouncedSearch = useDebouncedValue(searchInput, 300).trim();
@@ -73,7 +95,12 @@ export function UserManagementPage() {
   const canCreateUser = Boolean(organization?.id) && hasPermission("user.create");
   const canUpdateUser = Boolean(organization?.id) && hasPermission("user.update");
   const canDeleteUser = Boolean(organization?.id) && hasPermission("user.delete");
+  const canManageInvitations =
+    Boolean(organization?.id) && (role === "ADMIN" || role === "MANAGER");
 
+  const shouldLoadUsers = statusFilter !== "pending";
+  const userStatus =
+    statusFilter === "inactive" ? "inactive" : ("active" satisfies UserStatusFilter);
   const {
     users,
     pagination,
@@ -87,24 +114,71 @@ export function UserManagementPage() {
       search: debouncedSearch || undefined,
       sort: "createdAt",
       order: "desc",
+      status: userStatus,
     },
-    canReadUsers
+    canReadUsers && shouldLoadUsers
   );
   const {
-    createUser,
     updateUser,
     deleteUser,
-    isCreating,
+    deleteUserPermanently,
     isUpdating,
     isDeleting,
+    isPermanentlyDeleting,
     deletingUserId,
+    permanentlyDeletingUserId,
   } = useUserMutations();
+  const {
+    sendInvitation,
+    resendInvitation,
+    deleteInvitation,
+    isSending,
+    isResending,
+    isDeleting: isDeletingInvitation,
+    resendingInvitationId,
+    deletingInvitationId,
+  } = useInvitationMutations();
 
-  const displayedUsers = users.length;
-  const displayedRoles = useMemo(
-    () => Array.from(new Set(users.map((user) => user.role))).length,
-    [users]
+  const {
+    invitations,
+    isLoading: isInvitationsLoading,
+    error: invitationsError,
+  } = useInvitations(statusFilter === "pending" && canManageInvitations);
+
+  const pendingInvitations = useMemo(
+    () => invitations.filter((invitation) => invitation.status === "PENDING"),
+    [invitations]
   );
+
+  const filteredInvitations = useMemo(() => {
+    if (!debouncedSearch) {
+      return pendingInvitations;
+    }
+
+    const query = debouncedSearch.toLowerCase();
+    return pendingInvitations.filter(
+      (invitation) =>
+        invitation.email.toLowerCase().includes(query) ||
+        invitation.role.toLowerCase().includes(query)
+    );
+  }, [debouncedSearch, pendingInvitations]);
+
+  const displayedUsers =
+    statusFilter === "pending" ? filteredInvitations.length : users.length;
+  const displayedRoles = useMemo(() => {
+    const source =
+      statusFilter === "pending" ? filteredInvitations.map((item) => item.role) : users.map((user) => user.role);
+    return Array.from(new Set(source)).length;
+  }, [filteredInvitations, statusFilter, users]);
+
+  function buildActionMeta(extra: Record<string, unknown> = {}) {
+    return {
+      organizationId: organization?.id ?? null,
+      actorRole: role ?? null,
+      statusFilter,
+      ...extra,
+    };
+  }
 
   function handleOpenChange(open: boolean) {
     setIsFormOpen(open);
@@ -116,7 +190,7 @@ export function UserManagementPage() {
 
   function openCreateDialog() {
     setEditingUser(null);
-    setIsFormOpen(true);
+    setIsInviteOpen(true);
   }
 
   function openEditDialog(user: OrganizationUser) {
@@ -125,39 +199,189 @@ export function UserManagementPage() {
   }
 
   async function handleSubmit(values: UserFormValues) {
+    if (!editingUser) {
+      return;
+    }
+
+    appLogger.info("Dashboard user update requested.", buildActionMeta({
+      userId: editingUser.id,
+      email: editingUser.email,
+      nextRole: values.role,
+      nextIsActive: values.isActive,
+    }));
+
     try {
-      if (editingUser) {
-        await updateUser({
-          userId: editingUser.id,
-          payload: {
-            name: values.name,
-            role: values.role,
-            isActive: values.isActive,
-          },
-        });
-        toast.success("Utilisateur mis a jour avec succes.");
-      } else {
-        await createUser({
-          email: values.email,
-          password: values.password,
+      await updateUser({
+        userId: editingUser.id,
+        payload: {
           name: values.name,
           role: values.role,
-        });
-        toast.success("Utilisateur cree avec succes.");
-      }
+          isActive: values.isActive,
+        },
+      });
+      appLogger.info("Dashboard user update succeeded.", buildActionMeta({
+        userId: editingUser.id,
+        email: editingUser.email,
+      }));
+      toast.success("Utilisateur mis a jour avec succes.");
 
       setIsFormOpen(false);
       setEditingUser(null);
     } catch (error) {
-      toast.error(getErrorMessage(error));
+      const message = getErrorMessage(error);
+      appLogger.warn("Dashboard user update failed.", buildActionMeta({
+        userId: editingUser.id,
+        email: editingUser.email,
+        error: message,
+      }));
+      toast.error(message);
+    }
+  }
+
+  async function handleInvite(payload: { email: string; role: InvitationRole }) {
+    appLogger.info("Dashboard invitation requested.", buildActionMeta({
+      email: payload.email,
+      role: payload.role,
+    }));
+
+    try {
+      await sendInvitation({
+        email: payload.email,
+        role: payload.role,
+      });
+      appLogger.info("Dashboard invitation succeeded.", buildActionMeta({
+        email: payload.email,
+        role: payload.role,
+      }));
+      toast.success("Invitation envoyee avec succes.");
+      setIsInviteOpen(false);
+    } catch (error) {
+      const message = getErrorMessage(error);
+      appLogger.warn("Dashboard invitation failed.", buildActionMeta({
+        email: payload.email,
+        role: payload.role,
+        error: message,
+      }));
+      toast.error(message);
+    }
+  }
+
+  async function handleResendInvitation(invitation: Invitation) {
+    appLogger.info("Dashboard invitation resend requested.", buildActionMeta({
+      invitationId: invitation.id,
+      email: invitation.email,
+      role: invitation.role,
+    }));
+
+    try {
+      await resendInvitation(invitation.id);
+      appLogger.info("Dashboard invitation resend succeeded.", buildActionMeta({
+        invitationId: invitation.id,
+        email: invitation.email,
+      }));
+      toast.success("Invitation renvoyee.");
+    } catch (error) {
+      const message = getErrorMessage(error);
+      appLogger.warn("Dashboard invitation resend failed.", buildActionMeta({
+        invitationId: invitation.id,
+        email: invitation.email,
+        error: message,
+      }));
+      toast.error(message);
+    }
+  }
+
+  async function handleDeleteInvitation(invitation: Invitation) {
+    appLogger.info("Dashboard invitation deletion requested.", buildActionMeta({
+      invitationId: invitation.id,
+      email: invitation.email,
+      role: invitation.role,
+    }));
+
+    try {
+      const result = await deleteInvitation(invitation.id);
+      appLogger.info("Dashboard invitation deletion succeeded.", buildActionMeta({
+        invitationId: invitation.id,
+        email: invitation.email,
+      }));
+      toast.success(result.message);
+    } catch (error) {
+      const message = getErrorMessage(error);
+      appLogger.warn("Dashboard invitation deletion failed.", buildActionMeta({
+        invitationId: invitation.id,
+        email: invitation.email,
+        error: message,
+      }));
+      toast.error(message);
+    }
+  }
+
+  async function handleReactivateUser(user: OrganizationUser) {
+    appLogger.info("Dashboard user reactivation requested.", buildActionMeta({
+      userId: user.id,
+      email: user.email,
+    }));
+
+    try {
+      await updateUser({
+        userId: user.id,
+        payload: {
+          isActive: true,
+        },
+      });
+      appLogger.info("Dashboard user reactivation succeeded.", buildActionMeta({
+        userId: user.id,
+        email: user.email,
+      }));
+      toast.success("Utilisateur reactive.");
+    } catch (error) {
+      const message = getErrorMessage(error);
+      appLogger.warn("Dashboard user reactivation failed.", buildActionMeta({
+        userId: user.id,
+        email: user.email,
+        error: message,
+      }));
+      toast.error(message);
+    }
+  }
+
+  async function handlePermanentDelete(user: OrganizationUser) {
+    appLogger.info("Dashboard user permanent deletion requested.", buildActionMeta({
+      userId: user.id,
+      email: user.email,
+    }));
+
+    try {
+      const result = await deleteUserPermanently(user.id);
+      appLogger.info("Dashboard user permanent deletion succeeded.", buildActionMeta({
+        userId: user.id,
+        email: user.email,
+      }));
+      toast.success(result.message);
+    } catch (error) {
+      const message = getErrorMessage(error);
+      appLogger.warn("Dashboard user permanent deletion failed.", buildActionMeta({
+        userId: user.id,
+        email: user.email,
+        error: message,
+      }));
+      toast.error(message);
     }
   }
 
   async function handleDeleteUser(user: OrganizationUser) {
     const shouldGoToPreviousPage = page > 1 && users.length === 1;
+    appLogger.info("Dashboard user deactivation requested.", buildActionMeta({
+      userId: user.id,
+      email: user.email,
+    }));
 
     try {
       const result = await deleteUser(user.id);
+      appLogger.info("Dashboard user deactivation succeeded.", buildActionMeta({
+        userId: user.id,
+        email: user.email,
+      }));
       toast.success(result.message);
 
       if (shouldGoToPreviousPage) {
@@ -169,7 +393,13 @@ export function UserManagementPage() {
         setEditingUser(null);
       }
     } catch (error) {
-      toast.error(getErrorMessage(error));
+      const message = getErrorMessage(error);
+      appLogger.warn("Dashboard user deactivation failed.", buildActionMeta({
+        userId: user.id,
+        email: user.email,
+        error: message,
+      }));
+      toast.error(message);
     }
   }
 
@@ -199,17 +429,25 @@ export function UserManagementPage() {
           <Card className="border-border/70 bg-background/80 shadow-sm">
             <CardHeader className="pb-2">
               <div className="flex items-center justify-between gap-3">
-                <CardDescription>Collaborateurs actifs</CardDescription>
+                <CardDescription>
+                  {statusFilter === "pending" ? "Invitations en attente" : "Collaborateurs actifs"}
+                </CardDescription>
                 <div className="rounded-2xl border border-border/70 bg-secondary/60 p-2">
                   <Users className="h-4 w-4 text-primary" />
                 </div>
               </div>
               <CardTitle className="text-2xl">
-                {isLoading ? "..." : new Intl.NumberFormat("fr-FR").format(pagination.total)}
+                {statusFilter === "pending"
+                  ? new Intl.NumberFormat("fr-FR").format(filteredInvitations.length)
+                  : isLoading
+                    ? "..."
+                    : new Intl.NumberFormat("fr-FR").format(pagination.total)}
               </CardTitle>
             </CardHeader>
             <CardContent className="pt-0 text-sm text-muted-foreground">
-              La liste est fournie directement par l&apos;endpoint backend `/users`.
+              {statusFilter === "pending"
+                ? "Les invitations en attente proviennent directement de l'endpoint `/invitations`."
+                : "La liste est fournie directement par l'endpoint backend `/users`."}
             </CardContent>
           </Card>
 
@@ -271,17 +509,123 @@ export function UserManagementPage() {
                 />
               </div>
 
-              <Can permission="user.create">
+              <Select
+                value={statusFilter}
+                onValueChange={(value) => {
+                  setStatusFilter(value as "active" | "pending" | "inactive");
+                  setPage(1);
+                }}
+              >
+                <SelectTrigger className="w-full sm:w-[170px]">
+                  <SelectValue placeholder="Statut" />
+                </SelectTrigger>
+                <SelectContent>
+                  {STATUS_OPTIONS.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              {canManageInvitations ? (
                 <Button onClick={openCreateDialog} className="shrink-0 rounded-full">
                   <UserPlus className="h-4 w-4" />
-                  Nouvel utilisateur
+                  Inviter un utilisateur
                 </Button>
-              </Can>
+              ) : null}
             </div>
           </CardHeader>
 
           <CardContent className="pt-6">
-            {isLoading ? (
+            {statusFilter === "pending" ? (
+              !canManageInvitations ? (
+                <div className="rounded-[1.25rem] border border-amber-500/20 bg-amber-500/5 p-6 text-sm text-muted-foreground">
+                  Les invitations sont reservees aux roles `ADMIN` et `MANAGER`.
+                </div>
+              ) : isInvitationsLoading ? (
+                <div className="space-y-3">
+                  {Array.from({ length: 4 }).map((_, index) => (
+                    <Skeleton key={index} className="h-16 w-full rounded-[1.25rem]" />
+                  ))}
+                </div>
+              ) : invitationsError ? (
+                <div className="rounded-[1.25rem] border border-destructive/20 bg-destructive/5 p-6">
+                  <p className="text-sm font-medium text-foreground">
+                    Impossible de charger les invitations.
+                  </p>
+                  <p className="mt-2 text-sm text-muted-foreground">{invitationsError}</p>
+                </div>
+              ) : filteredInvitations.length === 0 ? (
+                <div className="flex min-h-[240px] flex-col items-center justify-center rounded-[1.5rem] border border-dashed border-border/70 bg-secondary/30 px-6 text-center">
+                  <Mail className="h-8 w-8 text-primary" />
+                  <h3 className="mt-4 text-lg font-semibold text-foreground">
+                    Aucune invitation en attente
+                  </h3>
+                  <p className="mt-2 max-w-md text-sm leading-6 text-muted-foreground">
+                    Cette vue ne conserve que les invitations encore en attente d&apos;acceptation.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Email</TableHead>
+                        <TableHead>Role</TableHead>
+                        <TableHead>Expire le</TableHead>
+                        <TableHead className="text-right">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {filteredInvitations.map((invitation) => (
+                        <TableRow key={invitation.id}>
+                          <TableCell className="text-muted-foreground">
+                            {invitation.email}
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="secondary">{invitation.role}</Badge>
+                          </TableCell>
+                          <TableCell className="text-muted-foreground">
+                            {formatDate(invitation.expiresAt)}
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex justify-end gap-2">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                disabled={isResending}
+                                onClick={() => void handleResendInvitation(invitation)}
+                              >
+                                {resendingInvitationId === invitation.id ? (
+                                  <LoaderCircle className="h-4 w-4 animate-spin" />
+                                ) : (
+                                  <RefreshCw className="h-4 w-4" />
+                                )}
+                                Renvoyer
+                              </Button>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                disabled={isDeletingInvitation}
+                                onClick={() => void handleDeleteInvitation(invitation)}
+                              >
+                                {deletingInvitationId === invitation.id ? (
+                                  <LoaderCircle className="h-4 w-4 animate-spin" />
+                                ) : (
+                                  <Trash2 className="h-4 w-4" />
+                                )}
+                                Supprimer
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )
+            ) : isLoading ? (
               <div className="space-y-3">
                 {Array.from({ length: 5 }).map((_, index) => (
                   <Skeleton key={index} className="h-16 w-full rounded-[1.25rem]" />
@@ -298,18 +642,20 @@ export function UserManagementPage() {
               <div className="flex min-h-[260px] flex-col items-center justify-center rounded-[1.5rem] border border-dashed border-border/70 bg-secondary/30 px-6 text-center">
                 <Users className="h-8 w-8 text-primary" />
                 <h3 className="mt-4 text-lg font-semibold text-foreground">
-                  Aucun utilisateur actif
+                  {statusFilter === "inactive" ? "Aucun utilisateur desactive" : "Aucun utilisateur actif"}
                 </h3>
                 <p className="mt-2 max-w-md text-sm leading-6 text-muted-foreground">
-                  Les utilisateurs inactifs ne sont pas retournes par la liste backend actuelle.
+                  {statusFilter === "inactive"
+                    ? "Aucun profil desactive n'est disponible pour cette organisation."
+                    : "Invitez un collaborateur ou ajustez vos filtres pour afficher plus de profils."}
                 </p>
                 <Button
                   onClick={openCreateDialog}
-                  disabled={!canCreateUser}
+                  disabled={!canManageInvitations}
                   className="mt-5 rounded-full"
                 >
                   <UserPlus className="h-4 w-4" />
-                  Ajouter un utilisateur
+                  Inviter un utilisateur
                 </Button>
               </div>
             ) : (
@@ -351,50 +697,103 @@ export function UserManagementPage() {
                         </TableCell>
                         <TableCell>
                           <div className="flex justify-end gap-2">
-                            <Can permission="user.update">
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => openEditDialog(user)}
-                              >
-                                Modifier
-                              </Button>
-                            </Can>
-
-                            <Can permission="user.delete">
-                              <AlertDialog>
-                                <AlertDialogTrigger asChild>
+                            {statusFilter === "inactive" ? (
+                              <>
+                                <Can permission="user.update">
                                   <Button
                                     variant="outline"
                                     size="sm"
-                                    disabled={isDeleting}
+                                    onClick={() => void handleReactivateUser(user)}
+                                    disabled={isUpdating}
                                   >
-                                    Desactiver
+                                    <UserCheck className="h-4 w-4" />
+                                    Reactiver
                                   </Button>
-                                </AlertDialogTrigger>
-                                <AlertDialogContent>
-                                  <AlertDialogHeader>
-                                    <AlertDialogTitle>Desactiver cet utilisateur ?</AlertDialogTitle>
-                                    <AlertDialogDescription>
-                                      Le backend traite cette suppression comme une desactivation
-                                      douce. L&apos;utilisateur sortira de la liste active.
-                                    </AlertDialogDescription>
-                                  </AlertDialogHeader>
-                                  <AlertDialogFooter>
-                                    <AlertDialogCancel>Annuler</AlertDialogCancel>
-                                    <AlertDialogAction
-                                      onClick={() => void handleDeleteUser(user)}
-                                      disabled={deletingUserId === user.id}
-                                    >
-                                      {deletingUserId === user.id ? (
-                                        <LoaderCircle className="h-4 w-4 animate-spin" />
-                                      ) : null}
-                                      Confirmer
-                                    </AlertDialogAction>
-                                  </AlertDialogFooter>
-                                </AlertDialogContent>
-                              </AlertDialog>
-                            </Can>
+                                </Can>
+                                <Can permission="user.delete">
+                                  <AlertDialog>
+                                    <AlertDialogTrigger asChild>
+                                      <Button
+                                        variant="outline"
+                                        size="sm"
+                                        disabled={isPermanentlyDeleting}
+                                      >
+                                        <Trash2 className="h-4 w-4" />
+                                        Supprimer
+                                      </Button>
+                                    </AlertDialogTrigger>
+                                    <AlertDialogContent>
+                                      <AlertDialogHeader>
+                                        <AlertDialogTitle>Supprimer definitivement ?</AlertDialogTitle>
+                                        <AlertDialogDescription>
+                                          Cette action est irreversible. L&apos;utilisateur sera
+                                          supprime de la base.
+                                        </AlertDialogDescription>
+                                      </AlertDialogHeader>
+                                      <AlertDialogFooter>
+                                        <AlertDialogCancel>Annuler</AlertDialogCancel>
+                                        <AlertDialogAction
+                                          onClick={() => void handlePermanentDelete(user)}
+                                          disabled={permanentlyDeletingUserId === user.id}
+                                        >
+                                          {permanentlyDeletingUserId === user.id ? (
+                                            <LoaderCircle className="h-4 w-4 animate-spin" />
+                                          ) : null}
+                                          Confirmer
+                                        </AlertDialogAction>
+                                      </AlertDialogFooter>
+                                    </AlertDialogContent>
+                                  </AlertDialog>
+                                </Can>
+                              </>
+                            ) : (
+                              <>
+                                <Can permission="user.update">
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => openEditDialog(user)}
+                                  >
+                                    Modifier
+                                  </Button>
+                                </Can>
+
+                                <Can permission="user.delete">
+                                  <AlertDialog>
+                                    <AlertDialogTrigger asChild>
+                                      <Button
+                                        variant="outline"
+                                        size="sm"
+                                        disabled={isDeleting}
+                                      >
+                                        Desactiver
+                                      </Button>
+                                    </AlertDialogTrigger>
+                                    <AlertDialogContent>
+                                      <AlertDialogHeader>
+                                        <AlertDialogTitle>Desactiver cet utilisateur ?</AlertDialogTitle>
+                                        <AlertDialogDescription>
+                                          Le backend traite cette suppression comme une desactivation
+                                          douce. L&apos;utilisateur sortira de la liste active.
+                                        </AlertDialogDescription>
+                                      </AlertDialogHeader>
+                                      <AlertDialogFooter>
+                                        <AlertDialogCancel>Annuler</AlertDialogCancel>
+                                        <AlertDialogAction
+                                          onClick={() => void handleDeleteUser(user)}
+                                          disabled={deletingUserId === user.id}
+                                        >
+                                          {deletingUserId === user.id ? (
+                                            <LoaderCircle className="h-4 w-4 animate-spin" />
+                                          ) : null}
+                                          Confirmer
+                                        </AlertDialogAction>
+                                      </AlertDialogFooter>
+                                    </AlertDialogContent>
+                                  </AlertDialog>
+                                </Can>
+                              </>
+                            )}
                           </div>
                         </TableCell>
                       </TableRow>
@@ -404,7 +803,11 @@ export function UserManagementPage() {
 
                 <div className="flex flex-col gap-3 border-t border-border/70 pt-4 sm:flex-row sm:items-center sm:justify-between">
                   <p className="text-sm text-muted-foreground">
-                    {isFetching ? "Actualisation..." : `${pagination.total} utilisateur(s) actifs`}
+                    {isFetching
+                      ? "Actualisation..."
+                      : `${pagination.total} utilisateur(s) ${
+                          statusFilter === "inactive" ? "inactifs" : "actifs"
+                        }`}
                   </p>
 
                   <div className="flex items-center justify-end gap-2">
@@ -456,9 +859,17 @@ export function UserManagementPage() {
         user={editingUser}
         canCreateUser={canCreateUser}
         canUpdateUser={canUpdateUser}
-        isSubmitting={isCreating || isUpdating}
+        isSubmitting={isUpdating}
         onOpenChange={handleOpenChange}
         onSubmit={handleSubmit}
+      />
+
+      <InviteUserDialog
+        open={isInviteOpen}
+        canInvite={canManageInvitations}
+        isSubmitting={isSending}
+        onOpenChange={setIsInviteOpen}
+        onSubmit={handleInvite}
       />
     </>
   );

@@ -25,6 +25,7 @@ afterEach(async () => {
     "Invitation",
     "CustomerRefreshToken",
     "RefreshCustomerToken",
+    "AuditLog",
     "CustomerAuditLog",
     "User",
     "Customer",

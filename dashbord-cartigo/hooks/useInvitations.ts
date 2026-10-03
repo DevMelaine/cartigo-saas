@@ -47,6 +47,20 @@ export function useInvitationMutations() {
     },
   });
 
+  const resendMutation = useMutation({
+    mutationFn: (invitationId: string) => invitationService.resendInvitation(invitationId),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: invitationKeys.all });
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (invitationId: string) => invitationService.deleteInvitation(invitationId),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: invitationKeys.all });
+    },
+  });
+
   const acceptMutation = useMutation({
     mutationFn: (payload: AcceptInvitationInput) => invitationService.acceptInvitation(payload),
     onSuccess: async () => {
@@ -56,8 +70,14 @@ export function useInvitationMutations() {
 
   return {
     sendInvitation: sendMutation.mutateAsync,
+    resendInvitation: resendMutation.mutateAsync,
+    deleteInvitation: deleteMutation.mutateAsync,
     acceptInvitation: acceptMutation.mutateAsync,
     isSending: sendMutation.isPending,
+    isResending: resendMutation.isPending,
+    isDeleting: deleteMutation.isPending,
     isAccepting: acceptMutation.isPending,
+    resendingInvitationId: resendMutation.variables ?? null,
+    deletingInvitationId: deleteMutation.variables ?? null,
   };
 }

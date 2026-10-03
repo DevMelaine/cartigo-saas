@@ -83,6 +83,10 @@ function buildSearchParams(params: UserListParams) {
     searchParams.set("order", params.order);
   }
 
+  if (params.status) {
+    searchParams.set("status", params.status);
+  }
+
   const queryString = searchParams.toString();
   return queryString ? `?${queryString}` : "";
 }
@@ -143,6 +147,17 @@ export async function updateUser(
 
 export async function deleteUser(userId: string): Promise<{ message: string }> {
   const payload = await apiRequestRaw<unknown>(`/users/${userId}`, {
+    method: "DELETE",
+  });
+
+  const parsed = deactivationResponseSchema.parse(payload);
+  return { message: parsed.message };
+}
+
+export async function deleteUserPermanently(
+  userId: string
+): Promise<{ message: string }> {
+  const payload = await apiRequestRaw<unknown>(`/users/${userId}/permanent`, {
     method: "DELETE",
   });
 

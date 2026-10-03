@@ -3,8 +3,27 @@ const {
   listNotificationsSchema,
   notificationIdParamsSchema,
   registerDeviceSchema,
+  loginNotificationSchema,
+  transactionNotificationSchema,
+  validateWithSchema,
   buildValidationError,
 } = require("../validators/notification.validator");
+
+function handleControllerError(res, error, fallbackMessage) {
+  return res.status(error.statusCode || 500).json({
+    success: false,
+    message: error.message || fallbackMessage,
+    errors: error.details || undefined,
+  });
+}
+
+function buildAuthNotificationUser(req, userPayload = {}) {
+  return {
+    id: req.user.userId,
+    email: userPayload.email,
+    phone: userPayload.phone,
+  };
+}
 
 async function listNotifications(req, res) {
   try {
@@ -30,11 +49,7 @@ async function listNotifications(req, res) {
       ...result,
     });
   } catch (error) {
-    return res.status(error.statusCode || 500).json({
-      success: false,
-      message: error.message || "Unable to list notifications.",
-      errors: error.details || undefined,
-    });
+    return handleControllerError(res, error, "Unable to list notifications.");
   }
 }
 
@@ -50,10 +65,11 @@ async function getUnreadCount(req, res) {
       data: result,
     });
   } catch (error) {
-    return res.status(error.statusCode || 500).json({
-      success: false,
-      message: error.message || "Unable to fetch unread notifications count.",
-    });
+    return handleControllerError(
+      res,
+      error,
+      "Unable to fetch unread notifications count."
+    );
   }
 }
 
@@ -78,11 +94,7 @@ async function markAsRead(req, res) {
       data: notification,
     });
   } catch (error) {
-    return res.status(error.statusCode || 500).json({
-      success: false,
-      message: error.message || "Unable to mark notification as read.",
-      errors: error.details || undefined,
-    });
+    return handleControllerError(res, error, "Unable to mark notification as read.");
   }
 }
 
@@ -98,10 +110,7 @@ async function markAllAsRead(req, res) {
       data: result,
     });
   } catch (error) {
-    return res.status(error.statusCode || 500).json({
-      success: false,
-      message: error.message || "Unable to mark all notifications as read.",
-    });
+    return handleControllerError(res, error, "Unable to mark all notifications as read.");
   }
 }
 
@@ -127,15 +136,87 @@ async function registerDevice(req, res) {
       data: deviceToken,
     });
   } catch (error) {
-    return res.status(error.statusCode || 500).json({
-      success: false,
-      message: error.message || "Unable to register device token.",
-      errors: error.details || undefined,
+    return handleControllerError(res, error, "Unable to register device token.");
+  }
+}
+
+async function triggerLoginNotification(req, res) {
+  try {
+    const value = validateWithSchema(
+      loginNotificationSchema,
+      req.body,
+      "Invalid login notification payload."
+    );
+
+    const user = buildAuthNotificationUser(req, value.user);
+    const metadata = {
+      ...value.metadata,
+      organizationId: req.user.organizationId || value.metadata.organizationId || null,
+      ipAddress: value.metadata.ipAddress || req.ip,
+      userAgent: value.metadata.userAgent || req.get("user-agent"),
+    };
+
+    const result = value.suspicious
+      ? await notificationService.notifySuspiciousLogin(user, metadata, {
+          channels: value.channels,
+          organizationId: req.user.organizationId || null,
+        })
+      : await notificationService.notifyLogin(user, metadata, {
+          channels: value.channels,
+          organizationId: req.user.organizationId || null,
+        });
+
+    return res.status(202).json({
+      success: true,
+      message: value.suspicious
+        ? "Suspicious login notification queued."
+        : "Login notification queued.",
+      data: result,
     });
+  } catch (error) {
+    return handleControllerError(res, error, "Unable to queue login notification.");
+  }
+}
+
+async function triggerTransactionNotification(req, res) {
+  try {
+    const value = validateWithSchema(
+      transactionNotificationSchema,
+      req.body,
+      "Invalid transaction notification payload."
+    );
+
+    const user = buildAuthNotificationUser(req, value.user);
+    const metadata = {
+      ...value.metadata,
+      organizationId: req.user.organizationId || value.metadata.organizationId || null,
+      ipAddress: value.metadata.ipAddress || req.ip,
+      userAgent: value.metadata.userAgent || req.get("user-agent"),
+    };
+
+    const result = await notificationService.notifyTransaction(user, value.transaction, {
+      channels: value.channels,
+      metadata,
+      organizationId: req.user.organizationId || null,
+    });
+
+    return res.status(202).json({
+      success: true,
+      message: "Transaction notification queued.",
+      data: result,
+    });
+  } catch (error) {
+    return handleControllerError(
+      res,
+      error,
+      "Unable to queue transaction notification."
+    );
   }
 }
 
 module.exports = {
+  triggerLoginNotification,
+  triggerTransactionNotification,
   listNotifications,
   getUnreadCount,
   markAsRead,

@@ -330,6 +330,10 @@ enum NotificationType {
   ORDER_PAID
   ORDER_READY
   LOW_STOCK
+  LOGIN
+  SUSPICIOUS_LOGIN
+  PASSWORD_CHANGED
+  TRANSACTION_ALERT
 }
 
 model RefreshToken {
@@ -388,9 +392,16 @@ model AuditLog {
   user           User?    @relation(fields: [userId], references: [id])
   organizationId String?
   action         String
+  entityType     String?
+  entityId       String?
+  entityLabel    String?
   ipAddress      String?
   userAgent      String?
   createdAt      DateTime @default(now())
+
+  @@index([organizationId])
+  @@index([organizationId, createdAt])
+  @@index([entityType])
 }
 
 model CustomerAuditLog {

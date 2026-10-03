@@ -14,8 +14,10 @@ const invitationRoutes = require("./routes/invitation.routes");
 const paymentRoutes = require("./routes/payment.routes");
 const notificationRoutes = require("./routes/notification.routes");
 const publicRoutes = require("./routes/public.routes");
+const activityLogRoutes = require("./routes/activityLog.routes");
 const uploadRoutes = require("./modules/upload/upload.routes");
 const securityMiddleware = require("./middlewares/securityMiddleware");
+const requestLogger = require("./middlewares/requestLogger");
 const swaggerUi = require("swagger-ui-express");
 const swaggerSpec = require("./swagger");
 
@@ -55,6 +57,7 @@ app.use(
 app.use(express.json());
 
 securityMiddleware(app);
+app.use(requestLogger);
 
 app.use("/api/auth", authRoutes);
 app.use("/api/test", testRoutes);
@@ -69,6 +72,7 @@ app.use("/api/cart", cartRoutes);
 app.use("/api/orders", orderRoutes);
 app.use("/api/payments", paymentRoutes);
 app.use("/api/notifications", notificationRoutes);
+app.use("/api/activity-logs", activityLogRoutes);
 app.use("/api/public", publicRoutes);
 app.use("/api/upload", uploadRoutes);
 app.use("/public", publicRoutes);

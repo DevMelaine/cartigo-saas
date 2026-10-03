@@ -1,12 +1,14 @@
 import type { OrderStatus } from "@/types/order";
 
-export type ActivityEntityType = "order";
+export type ActivityEntityType = "user" | "auth" | "system" | "order";
 
 export type ActivityLog = {
   id: string;
+  organizationId: string | null;
+  performedBy: string | null;
   action: string;
   entityType: ActivityEntityType;
-  entityId: string;
+  entityId: string | null;
   entityLabel: string;
   orderReference: string;
   customerName: string;
@@ -15,6 +17,7 @@ export type ActivityLog = {
   actorRole: string | null;
   previousStatus: OrderStatus | null;
   newStatus: OrderStatus | null;
+  timestamp: string;
   createdAt: string;
 };
 
@@ -47,5 +50,5 @@ export type ActivityLogResponse = {
     users: ActivityFilterOption[];
     types: ActivityFilterOption[];
   };
-  source: "order-audit-logs";
+  source: string;
 };

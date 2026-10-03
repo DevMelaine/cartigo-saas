@@ -17,6 +17,8 @@ import {
 
 import { useAuth } from '@/hooks/useAuth'
 import { cn } from '@/lib/utils'
+import { canAccessAnalytics } from '@/utils/analytics-permissions'
+import { canAccessSettings } from '@/utils/settings-permissions'
 
 interface NavItem {
   name: string
@@ -32,7 +34,7 @@ export function Sidebar({
   setOpen: (open: boolean) => void
 }) {
   const pathname = usePathname()
-  const { hasPermission } = useAuth()
+  const { hasPermission, role } = useAuth()
   const navItems: NavItem[] = [
     { name: 'Vue d ensemble', href: '/dashboard', icon: <Home className="h-5 w-5" /> },
     ...(hasPermission('product.read')
@@ -60,13 +62,15 @@ export function Sidebar({
           },
         ]
       : []),
-    ...(hasPermission('analytics.read')
-      ? [{ name: 'Analyses', href: '/dashboard/analytics', icon: <BarChart3 className="h-5 w-5" /> }]
+    ...(canAccessAnalytics(role)
+      ? [{ name: 'Analytics', href: '/dashboard/analytics', icon: <BarChart3 className="h-5 w-5" /> }]
       : []),
     ...(hasPermission('activity.read')
       ? [{ name: 'Activite', href: '/dashboard/activity', icon: <History className="h-5 w-5" /> }]
       : []),
-    { name: 'Parametres', href: '/dashboard/settings', icon: <Settings className="h-5 w-5" /> },
+    ...(canAccessSettings(role)
+      ? [{ name: 'Parametres', href: '/dashboard/settings', icon: <Settings className="h-5 w-5" /> }]
+      : []),
   ]
 
   return (

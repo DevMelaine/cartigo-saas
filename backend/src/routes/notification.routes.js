@@ -1,8 +1,16 @@
 const express = require("express");
 const notificationController = require("../controllers/notification.controller");
 const notificationAuth = require("../middlewares/notificationAuth.middleware");
+const authMiddleware = require("../middlewares/authMiddleware");
 
 const router = express.Router();
+
+router.post("/login", authMiddleware, notificationController.triggerLoginNotification);
+router.post(
+  "/transaction",
+  authMiddleware,
+  notificationController.triggerTransactionNotification
+);
 
 router.use(notificationAuth);
 

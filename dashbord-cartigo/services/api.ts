@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { appLogger } from "@/lib/logger";
+
 const API_BASE_URL = (process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:5001/api").replace(
   /\/+$/,
   ""
@@ -296,6 +298,11 @@ async function performApiRequest<T>(
     hasToken: Boolean(resolvedAccessToken),
     headers: buildDebugHeaders(requestHeaders),
   });
+  appLogger.info("API request.", {
+    path,
+    method: init.method ?? "GET",
+    requiresAuth,
+  });
 
   const response = await performFetch(buildApiUrl(path), {
     ...init,
@@ -347,12 +354,31 @@ async function performApiRequest<T>(
       hasToken: Boolean(resolvedAccessToken),
       headers: buildDebugHeaders(requestHeaders),
     });
+    if (response.status >= 500) {
+      appLogger.error("API request failed.", {
+        path,
+        method: init.method ?? "GET",
+        status: response.status,
+      });
+    } else {
+      appLogger.warn("API request rejected.", {
+        path,
+        method: init.method ?? "GET",
+        status: response.status,
+      });
+    }
     throw new ApiError(
       extractErrorMessage(payload) || "Une erreur est survenue.",
       response.status,
       payload
     );
   }
+
+  appLogger.info("API response.", {
+    path,
+    method: init.method ?? "GET",
+    status: response.status,
+  });
 
   if (unwrapData && payload && typeof payload === "object" && "data" in payload) {
     return payload.data as T;

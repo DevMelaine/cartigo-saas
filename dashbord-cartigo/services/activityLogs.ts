@@ -1,131 +1,104 @@
-import * as orderService from "@/services/orders";
-import * as userService from "@/services/users";
-import type {
-  ActivityFilterOption,
-  ActivityLog,
-  ActivityLogFilters,
-  ActivityLogResponse,
-} from "@/types/activity";
+import { z } from "zod";
 
-function formatOrderReference(orderId: string) {
-  return `#${orderId.slice(0, 8).toUpperCase()}`;
-}
+import { apiRequestRaw } from "@/services/api";
+import type { ActivityLogFilters, ActivityLogResponse } from "@/types/activity";
 
-function normalizeDate(value?: string) {
-  if (!value) {
-    return null;
+const orderStatusSchema = z.enum([
+  "PENDING_PAYMENT",
+  "PAID",
+  "PROCESSING",
+  "READY_FOR_DELIVERY",
+  "IN_DELIVERY",
+  "DELIVERED",
+  "CANCELLED",
+]);
+
+const activityFilterOptionSchema = z.object({
+  value: z.string().min(1),
+  label: z.string().min(1),
+});
+
+const activityLogSchema = z.object({
+  id: z.string().min(1),
+  organizationId: z.string().nullable().optional().default(null),
+  performedBy: z.string().nullable().optional().default(null),
+  action: z.string().min(1),
+  entityType: z.enum(["user", "auth", "system", "order"]),
+  entityId: z.string().nullable().optional().default(null),
+  entityLabel: z.string().min(1),
+  orderReference: z.string().min(1),
+  customerName: z.string().min(1),
+  actorUserId: z.string().nullable().optional().default(null),
+  actorName: z.string().nullable().optional().default(null),
+  actorRole: z.string().nullable().optional().default(null),
+  previousStatus: orderStatusSchema.nullable().optional().default(null),
+  newStatus: orderStatusSchema.nullable().optional().default(null),
+  timestamp: z.string(),
+  createdAt: z.string(),
+});
+
+const activityLogResponseSchema = z.object({
+  success: z.boolean(),
+  data: z.array(activityLogSchema),
+  pagination: z.object({
+    page: z.number().int().positive(),
+    limit: z.number().int().positive(),
+    total: z.number().int().nonnegative(),
+    totalPages: z.number().int().nonnegative(),
+  }),
+  filterOptions: z.object({
+    actions: z.array(activityFilterOptionSchema),
+    users: z.array(activityFilterOptionSchema),
+    types: z.array(activityFilterOptionSchema),
+  }),
+  source: z.string().min(1),
+});
+
+function buildSearchParams(params: ActivityLogFilters) {
+  const searchParams = new URLSearchParams();
+
+  if (params.page) {
+    searchParams.set("page", String(params.page));
   }
 
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? null : date;
-}
+  if (params.limit) {
+    searchParams.set("limit", String(params.limit));
+  }
 
-function buildOption(value: string, label: string): ActivityFilterOption {
-  return { value, label };
+  if (params.search?.trim()) {
+    searchParams.set("search", params.search.trim());
+  }
+
+  if (params.userId?.trim()) {
+    searchParams.set("userId", params.userId);
+  }
+
+  if (params.action?.trim()) {
+    searchParams.set("action", params.action);
+  }
+
+  if (params.type && params.type !== "all") {
+    searchParams.set("type", params.type);
+  }
+
+  if (params.dateFrom) {
+    searchParams.set("dateFrom", params.dateFrom);
+  }
+
+  if (params.dateTo) {
+    searchParams.set("dateTo", params.dateTo);
+  }
+
+  const query = searchParams.toString();
+  return query ? `?${query}` : "";
 }
 
 export async function getActivityLogs(
   params: ActivityLogFilters = {}
 ): Promise<ActivityLogResponse> {
-  const page = params.page ?? 1;
-  const limit = params.limit ?? 10;
+  const payload = await apiRequestRaw<unknown>(`/activity-logs${buildSearchParams(params)}`, {
+    method: "GET",
+  });
 
-  const [ordersResponse, usersResponse] = await Promise.all([
-    orderService.getOrders({
-      page,
-      limit,
-      search: params.search?.trim() || undefined,
-      dateFrom: params.dateFrom || undefined,
-      dateTo: params.dateTo || undefined,
-    }),
-    userService.getUsers({
-      page: 1,
-      limit: 100,
-    }),
-  ]);
-
-  const [orderDetails] = await Promise.all([
-    Promise.all(ordersResponse.data.map((order) => orderService.getOrder(order.id))),
-  ]);
-
-  const userNamesById = new Map(
-    usersResponse.data.map((user) => [user.id, user.name])
-  );
-  const actionSet = new Set<string>();
-
-  const dateFrom = normalizeDate(params.dateFrom);
-  const dateTo = normalizeDate(params.dateTo);
-
-  const logs = orderDetails
-    .flatMap<ActivityLog>((order) =>
-      order.auditLogs.map((log) => {
-        actionSet.add(log.action);
-
-        return {
-          id: log.id,
-          action: log.action,
-          entityType: "order",
-          entityId: order.id,
-          entityLabel: `Commande ${formatOrderReference(order.id)}`,
-          orderReference: formatOrderReference(order.id),
-          customerName: order.customer.name,
-          actorUserId: log.changedByUserId,
-          actorName: log.changedByUserId
-            ? userNamesById.get(log.changedByUserId) ?? null
-            : null,
-          actorRole: log.changedByRole,
-          previousStatus: log.previousStatus,
-          newStatus: log.newStatus,
-          createdAt: log.createdAt,
-        };
-      })
-    )
-    .filter((log) => {
-      if (params.userId && log.actorUserId !== params.userId) {
-        return false;
-      }
-
-      if (params.action && params.action !== "all" && log.action !== params.action) {
-        return false;
-      }
-
-      if (params.type && params.type !== "all" && log.entityType !== params.type) {
-        return false;
-      }
-
-      const createdAt = normalizeDate(log.createdAt);
-      if (!createdAt) {
-        return true;
-      }
-
-      if (dateFrom && createdAt < dateFrom) {
-        return false;
-      }
-
-      if (dateTo && createdAt > dateTo) {
-        return false;
-      }
-
-      return true;
-    })
-    .sort(
-      (left, right) =>
-        new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime()
-    );
-
-  return {
-    data: logs,
-    pagination: ordersResponse.pagination,
-    filterOptions: {
-      actions: Array.from(actionSet)
-        .sort((left, right) => left.localeCompare(right))
-        .map((action) => buildOption(action, action.replace(/_/g, " "))),
-      users: usersResponse.data
-        .slice()
-        .sort((left, right) => left.name.localeCompare(right.name))
-        .map((user) => buildOption(user.id, user.name)),
-      types: [buildOption("order", "Commandes")],
-    },
-    source: "order-audit-logs",
-  };
+  return activityLogResponseSchema.parse(payload);
 }

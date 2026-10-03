@@ -91,14 +91,24 @@ export function useUserMutations() {
     },
   });
 
+  const permanentDeleteMutation = useMutation({
+    mutationFn: (userId: string) => userService.deleteUserPermanently(userId),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: userKeys.all });
+    },
+  });
+
   return {
     createUser: createMutation.mutateAsync,
     updateUser: updateMutation.mutateAsync,
     deleteUser: deleteMutation.mutateAsync,
+    deleteUserPermanently: permanentDeleteMutation.mutateAsync,
     isCreating: createMutation.isPending,
     isUpdating: updateMutation.isPending,
     isDeleting: deleteMutation.isPending,
+    isPermanentlyDeleting: permanentDeleteMutation.isPending,
     updatingUserId: updateMutation.variables?.userId ?? null,
     deletingUserId: deleteMutation.variables ?? null,
+    permanentlyDeletingUserId: permanentDeleteMutation.variables ?? null,
   };
 }

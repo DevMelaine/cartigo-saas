@@ -7,6 +7,7 @@ import axios, {
 
 import { APP_CONFIG } from '@/constants/app';
 import { authService } from '@/services/auth.service';
+import { appLogger } from '@/services/logger';
 import {
   clearTokens,
   getAccessToken,
@@ -105,6 +106,11 @@ api.interceptors.request.use(async (config) => {
   const nextConfig = config;
   const accessToken = await getAccessToken();
 
+  appLogger.info('API request.', {
+    method: nextConfig.method,
+    url: nextConfig.url,
+  });
+
   if (!accessToken) {
     return nextConfig;
   }
@@ -123,11 +129,24 @@ api.interceptors.request.use(async (config) => {
 });
 
 api.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    appLogger.info('API response.', {
+      method: response.config?.method,
+      url: response.config?.url,
+      status: response.status,
+    });
+    return response;
+  },
   async (error: AxiosError) => {
     const originalRequest = error.config as RetryableRequestConfig | undefined;
     const status = error.response?.status;
     const isRefreshRequest = originalRequest?.url?.includes('/customers/refresh-token');
+
+    appLogger.error('API request failed.', {
+      method: originalRequest?.method,
+      url: originalRequest?.url,
+      status: error.response?.status,
+    });
 
     if (!originalRequest || status !== 401 || originalRequest._retry || isRefreshRequest) {
       throw normalizeApiError(error);

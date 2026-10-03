@@ -13,7 +13,7 @@ async function createUser(req, res) {
       return res.status(403).json({ success: false, message: "Forbidden" });
     }
 
-    const user = await userService.createUser(req.body, req.user.organizationId);
+    const user = await userService.createUser(req.body, req.user);
     return res.status(201).json({ success: true, data: user });
   } catch (err) {
     const status = err.statusCode || 500;
@@ -28,7 +28,14 @@ async function listUsers(req, res) {
       return res.status(400).json({ success: false, message: "Invalid pagination", errors });
     }
 
-    const filters = { page, limit, search: req.query.search, sort: req.query.sort, order: req.query.order };
+    const filters = {
+      page,
+      limit,
+      search: req.query.search,
+      sort: req.query.sort,
+      order: req.query.order,
+      status: req.query.status,
+    };
     const result = await userService.listUsers(req.user.organizationId, filters);
     return res.status(200).json({ success: true, ...result });
   } catch (err) {
@@ -53,7 +60,7 @@ async function updateUser(req, res) {
       return res.status(403).json({ success: false, message: "Forbidden" });
     }
 
-    const user = await userService.updateUser(req.params.id, req.body, req.user.organizationId);
+    const user = await userService.updateUser(req.params.id, req.body, req.user);
     return res.status(200).json({ success: true, data: user });
   } catch (err) {
     const status = err.statusCode || 500;
@@ -67,7 +74,7 @@ async function deleteUser(req, res) {
       return res.status(403).json({ success: false, message: "Forbidden" });
     }
 
-    await userService.deleteUser(req.params.id, req.user.organizationId);
+    await userService.deleteUser(req.params.id, req.user);
     return res.status(200).json({ success: true, message: "User deactivated." });
   } catch (err) {
     const status = err.statusCode || 500;
@@ -75,4 +82,18 @@ async function deleteUser(req, res) {
   }
 }
 
-module.exports = { createUser, listUsers, getUser, updateUser, deleteUser };
+async function deleteUserPermanently(req, res) {
+  try {
+    if (req.user.role !== "ADMIN") {
+      return res.status(403).json({ success: false, message: "Forbidden" });
+    }
+
+    const result = await userService.deleteUserPermanently(req.params.id, req.user);
+    return res.status(200).json({ success: true, message: result.message });
+  } catch (err) {
+    const status = err.statusCode || 500;
+    return res.status(status).json({ success: false, message: err.message });
+  }
+}
+
+module.exports = { createUser, listUsers, getUser, updateUser, deleteUser, deleteUserPermanently };

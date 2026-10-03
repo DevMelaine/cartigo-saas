@@ -40,7 +40,28 @@ async function updateMyOrganization(req, res) {
   }
 }
 
+async function getOrganizationCustomers(req, res) {
+  try {
+    const customers = await organizationService.listOrganizationCustomers(
+      req.user.organizationId,
+      req.query
+    );
+
+    return res.status(200).json({
+      success: true,
+      ...customers,
+    });
+  } catch (error) {
+    return res.status(error.statusCode || 500).json({
+      success: false,
+      message: error.message || "Unable to load organization customers.",
+      errors: error.details,
+    });
+  }
+}
+
 module.exports = {
   getMyOrganization,
   updateMyOrganization,
+  getOrganizationCustomers,
 };

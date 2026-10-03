@@ -153,6 +153,18 @@ function getOpeningStatus(openingHours) {
   };
 }
 
+function resolveProductQuantity(product) {
+  if (typeof product?.inventory?.quantity === "number") {
+    return product.inventory.quantity;
+  }
+
+  if (typeof product?.stock === "number") {
+    return product.stock;
+  }
+
+  return 0;
+}
+
 function buildPublicProduct(product) {
   return {
     id: product.id,
@@ -163,7 +175,7 @@ function buildPublicProduct(product) {
     galleryImages: (product.galleryImages || [])
       .map((image) => resolvePublicFileUrl(image))
       .filter(Boolean),
-    quantity: product.inventory?.quantity ?? 0,
+    quantity: resolveProductQuantity(product),
     categoryId: product.category?.id || null,
     categoryName: product.category?.name || null,
   };
@@ -289,6 +301,7 @@ async function getOrganization(organizationId) {
           name: true,
           description: true,
           price: true,
+          stock: true,
           imageUrl: true,
           galleryImages: true,
           category: {
@@ -396,16 +409,17 @@ async function listOrganizationProducts({ organizationId, page, limit, search })
           name: "asc",
         },
       ],
-      select: {
-        id: true,
-        name: true,
-        description: true,
-        price: true,
-        imageUrl: true,
-        galleryImages: true,
-        category: {
-          select: {
-            id: true,
+        select: {
+          id: true,
+          name: true,
+          description: true,
+          price: true,
+          stock: true,
+          imageUrl: true,
+          galleryImages: true,
+          category: {
+            select: {
+              id: true,
             name: true,
           },
         },
@@ -431,16 +445,17 @@ async function getProduct(productId) {
       id: productId,
       status: "ACTIVE",
     },
-    select: {
-      id: true,
-      name: true,
-      description: true,
-      price: true,
-      imageUrl: true,
-      galleryImages: true,
-      category: {
-        select: {
-          id: true,
+      select: {
+        id: true,
+        name: true,
+        description: true,
+        price: true,
+        stock: true,
+        imageUrl: true,
+        galleryImages: true,
+        category: {
+          select: {
+            id: true,
           name: true,
         },
       },
@@ -476,7 +491,7 @@ async function getProduct(productId) {
     galleryImages: (product.galleryImages || [])
       .map((image) => resolvePublicFileUrl(image))
       .filter(Boolean),
-    quantity: product.inventory?.quantity ?? 0,
+    quantity: resolveProductQuantity(product),
     organizationId: product.organization.id,
     categoryId: product.category?.id || null,
     category: product.category?.name || null,

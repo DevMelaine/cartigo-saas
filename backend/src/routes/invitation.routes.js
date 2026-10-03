@@ -13,5 +13,7 @@ router.use(authorizeRoles("ADMIN", "MANAGER"));
 
 router.post("/", invitationController.createInvitation);
 router.get("/", invitationController.listInvitations);
+router.post("/:id/resend", invitationController.resendInvitation);
+router.delete("/:id", invitationController.deleteInvitation);
 
 module.exports = router;

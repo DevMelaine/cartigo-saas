@@ -1,4 +1,4 @@
-export const INVITABLE_ROLES = ["MANAGER", "CASHIER", "STAFF"] as const;
+export const INVITABLE_ROLES = ["ADMIN", "MANAGER", "CASHIER", "STAFF"] as const;
 export type InvitationRole = (typeof INVITABLE_ROLES)[number];
 
 export const INVITATION_STATUSES = ["PENDING", "ACCEPTED", "EXPIRED"] as const;

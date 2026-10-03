@@ -11,6 +11,7 @@ export type OrganizationUser = {
 
 export type UserSortField = "name" | "email" | "createdAt" | "updatedAt";
 export type UserSortOrder = "asc" | "desc";
+export type UserStatusFilter = "active" | "inactive" | "all";
 
 export type UserListParams = {
   page?: number;
@@ -18,6 +19,7 @@ export type UserListParams = {
   search?: string;
   sort?: UserSortField;
   order?: UserSortOrder;
+  status?: UserStatusFilter;
 };
 
 export type UserListResponse = {

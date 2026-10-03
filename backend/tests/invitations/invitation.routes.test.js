@@ -124,4 +124,40 @@ describe("Invitation routes", () => {
     expect(loginResponse.body.data.user.email).toBe(payload.email);
     expect(loginResponse.body.data.user.role).toBe(payload.role);
   });
+
+  it("should resend then delete a pending invitation", async () => {
+    const adminToken = await getAuthToken(app);
+    const payload = makeInvitePayload();
+
+    const createResponse = await request(app)
+      .post("/api/invitations")
+      .set("Authorization", `Bearer ${adminToken}`)
+      .send(payload)
+      .expect(201);
+
+    const invitationId = createResponse.body.data.id;
+    const firstInviteUrl = createResponse.body.data.inviteUrl;
+
+    const resendResponse = await request(app)
+      .post(`/api/invitations/${invitationId}/resend`)
+      .set("Authorization", `Bearer ${adminToken}`)
+      .expect(200);
+
+    expect(resendResponse.body.success).toBe(true);
+    expect(resendResponse.body.data.id).toBe(invitationId);
+    expect(resendResponse.body.data.inviteUrl).not.toBe(firstInviteUrl);
+    expect(resendResponse.body.data.status).toBe("PENDING");
+
+    await request(app)
+      .delete(`/api/invitations/${invitationId}`)
+      .set("Authorization", `Bearer ${adminToken}`)
+      .expect(200);
+
+    const listResponse = await request(app)
+      .get("/api/invitations")
+      .set("Authorization", `Bearer ${adminToken}`)
+      .expect(200);
+
+    expect(listResponse.body.data.find((invitation) => invitation.id === invitationId)).toBeUndefined();
+  });
 });

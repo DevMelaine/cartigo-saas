@@ -121,18 +121,31 @@ async function seedNotificationActors() {
 
 describe("Notifications module", () => {
   let pushProvider;
+  let emailProvider;
+  let smsProvider;
 
   beforeEach(() => {
     pushProvider = {
       sendToTokens: jest.fn().mockResolvedValue({ sentCount: 1 }),
     };
+    emailProvider = {
+      send: jest.fn().mockResolvedValue({ provider: "mock-email", messageId: randomUUID() }),
+    };
+    smsProvider = {
+      send: jest.fn().mockResolvedValue({ provider: "mock-sms" }),
+    };
 
     notificationService.setPushProvider(pushProvider);
+    notificationService.setEmailProvider(emailProvider);
+    notificationService.setSmsProvider(smsProvider);
   });
 
   afterEach(async () => {
     await notificationService.waitForBackgroundTasks();
     notificationService.resetPushProvider();
+    notificationService.resetEmailProvider();
+    notificationService.resetSmsProvider();
+    notificationService.clearAntiSpamState();
   });
 
   it("registers a device token for the authenticated actor", async () => {
@@ -427,5 +440,147 @@ describe("Notifications module", () => {
     expect(response.body.success).toBe(true);
     expect(response.body.data).toHaveLength(1);
     expect(response.body.data[0].customerId).toBe(context.customer.id);
+  });
+
+  it("queues a login notification from authenticated context and stores an in-app alert", async () => {
+    const context = await seedNotificationActors();
+
+    const response = await request(app)
+      .post("/api/notifications/login")
+      .set("Authorization", `Bearer ${context.tokens.admin}`)
+      .send({
+        user: {
+          phone: "+22890000000",
+        },
+        channels: ["email", "sms", "inApp"],
+        metadata: {
+          ipAddress: "197.200.1.1",
+          device: "Chrome on Windows",
+        },
+      })
+      .expect(202);
+
+    expect(response.body.success).toBe(true);
+    expect(response.body.data.queued).toBe(true);
+    expect(response.body.data.type).toBe(NOTIFICATION_TYPES.LOGIN);
+
+    await notificationService.waitForBackgroundTasks();
+
+    const notifications = await prisma.notification.findMany({
+      where: {
+        userId: context.users.admin.id,
+        type: NOTIFICATION_TYPES.LOGIN,
+      },
+    });
+
+    expect(notifications).toHaveLength(1);
+    expect(emailProvider.send).toHaveBeenCalledTimes(1);
+    expect(smsProvider.send).toHaveBeenCalledTimes(1);
+    expect(notifications[0].message).toContain("login");
+  });
+
+  it("queues a suspicious login notification when requested", async () => {
+    const context = await seedNotificationActors();
+
+    const response = await request(app)
+      .post("/api/notifications/login")
+      .set("Authorization", `Bearer ${context.tokens.admin}`)
+      .send({
+        suspicious: true,
+        metadata: {
+          ipAddress: "10.10.10.10",
+          location: "Lome",
+        },
+      })
+      .expect(202);
+
+    expect(response.body.success).toBe(true);
+    expect(response.body.data.type).toBe(NOTIFICATION_TYPES.SUSPICIOUS_LOGIN);
+
+    await notificationService.waitForBackgroundTasks();
+
+    const notifications = await prisma.notification.findMany({
+      where: {
+        userId: context.users.admin.id,
+        type: NOTIFICATION_TYPES.SUSPICIOUS_LOGIN,
+      },
+    });
+
+    expect(notifications).toHaveLength(1);
+    expect(emailProvider.send).toHaveBeenCalledTimes(1);
+  });
+
+  it("queues a transaction notification through the integration endpoint", async () => {
+    const context = await seedNotificationActors();
+
+    const response = await request(app)
+      .post("/api/notifications/transaction")
+      .set("Authorization", `Bearer ${context.tokens.admin}`)
+      .send({
+        channels: ["email", "inApp"],
+        transaction: {
+          id: "txn-001",
+          reference: "MFI-TRX-001",
+          amount: 25000,
+          currency: "XOF",
+          type: "DEPOSIT",
+          status: "SUCCESS",
+          description: "Savings deposit",
+        },
+      })
+      .expect(202);
+
+    expect(response.body.success).toBe(true);
+    expect(response.body.data.type).toBe(NOTIFICATION_TYPES.TRANSACTION_ALERT);
+
+    await notificationService.waitForBackgroundTasks();
+
+    const notifications = await prisma.notification.findMany({
+      where: {
+        userId: context.users.admin.id,
+        type: NOTIFICATION_TYPES.TRANSACTION_ALERT,
+      },
+    });
+
+    expect(notifications).toHaveLength(1);
+    expect(emailProvider.send).toHaveBeenCalledTimes(1);
+    expect(notifications[0].message).toContain("MFI-TRX-001");
+  });
+
+  it("throttles duplicate transaction notifications inside the anti-spam window", async () => {
+    const context = await seedNotificationActors();
+    const user = {
+      id: context.users.admin.id,
+      email: context.users.admin.email,
+    };
+    const transaction = {
+      id: "txn-duplicate",
+      reference: "MFI-DUP-001",
+      amount: 5000,
+      currency: "USD",
+      type: "TRANSFER",
+      status: "PENDING",
+    };
+
+    await notificationService.notifyTransaction(user, transaction, {
+      channels: ["email", "inApp"],
+      organizationId: context.organization.id,
+    });
+    await notificationService.notifyTransaction(user, transaction, {
+      channels: ["email", "inApp"],
+      organizationId: context.organization.id,
+    });
+
+    await notificationService.waitForBackgroundTasks();
+
+    const notifications = await prisma.notification.findMany({
+      where: {
+        userId: context.users.admin.id,
+        type: NOTIFICATION_TYPES.TRANSACTION_ALERT,
+      },
+    });
+
+    expect(notifications).toHaveLength(1);
+    expect(emailProvider.send).toHaveBeenCalledTimes(1);
   });
 });

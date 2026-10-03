@@ -7,6 +7,9 @@ const {
   validateCreateInvitation,
 } = require("../validators/invitationValidator");
 const { validateCreateUser } = require("../validators/userValidator");
+const { sendInvitationEmail } = require("./emailService");
+const { logActivity } = require("./activityLog.service");
+const { logger } = require("../lib/logger");
 
 const prisma = global.prisma || new PrismaClient();
 const SALT_ROUNDS = parseInt(process.env.BCRYPT_SALT_ROUNDS, 10) || 10;
@@ -126,6 +129,57 @@ async function ensureNoPendingInvitation(email, organizationId) {
   }
 }
 
+async function getInvitationNotificationContext(organizationId, userId) {
+  const [organization, performer] = await Promise.all([
+    prisma.organization.findUnique({
+      where: { id: organizationId },
+      select: { name: true },
+    }),
+    userId
+      ? prisma.user.findUnique({
+          where: { id: userId },
+          select: { name: true },
+        })
+      : Promise.resolve(null),
+  ]);
+
+  return {
+    organizationName: organization?.name || null,
+    performedByName: performer?.name || null,
+  };
+}
+
+async function sendInvitationEmailSafely({
+  invitation,
+  inviteUrl,
+  organizationId,
+  organizationName,
+  performedByName,
+  warningMessage,
+}) {
+  try {
+    await sendInvitationEmail({
+      to: invitation.email,
+      role: invitation.role,
+      inviteUrl,
+      expiresAt: invitation.expiresAt,
+      organizationName,
+      performedByName,
+    });
+
+    return true;
+  } catch (error) {
+    logger.warn(warningMessage, {
+      organizationId,
+      invitationId: invitation.id,
+      email: invitation.email,
+      error: error instanceof Error ? error.message : "Unknown error",
+    });
+
+    return false;
+  }
+}
+
 async function createInvitation(data, authUser) {
   const { isValid, errors } = validateCreateInvitation(data);
 
@@ -140,6 +194,8 @@ async function createInvitation(data, authUser) {
   await ensureEmailAvailable(email, organizationId);
   await ensureNoPendingInvitation(email, organizationId);
 
+  const notificationContext = await getInvitationNotificationContext(organizationId, userId);
+
   const invitation = await prisma.invitation.create({
     data: {
       email,
@@ -150,6 +206,34 @@ async function createInvitation(data, authUser) {
       expiresAt: new Date(Date.now() + INVITATION_TTL_MS),
       createdBy: userId,
     },
+  });
+
+  await logActivity({
+    organizationId,
+    performedBy: userId,
+    action: "INVITATION_CREATED",
+    entityType: "invitation",
+    entityId: invitation.id,
+    entityLabel: email,
+  });
+
+  const inviteUrl = buildInvitationUrl(invitation.token);
+  const invitationEmailDelivered = await sendInvitationEmailSafely({
+    invitation,
+    inviteUrl,
+    organizationId,
+    organizationName: notificationContext.organizationName,
+    performedByName: notificationContext.performedByName,
+    warningMessage: "Invitation email failed to send.",
+  });
+
+  logger.info("Invitation created.", {
+    organizationId,
+    performedBy: userId,
+    invitationId: invitation.id,
+    email: invitation.email,
+    role: invitation.role,
+    invitationEmailDelivered,
   });
 
   return serializeInvitation(invitation);
@@ -169,6 +253,103 @@ async function listInvitations(authUser) {
   });
 
   return invitations.map((invitation) => serializeInvitation(invitation));
+}
+
+async function resendInvitation(invitationId, authUser) {
+  const { organizationId } = await ensureInvitationContext(authUser);
+
+  const [invitation, notificationContext] = await Promise.all([
+    prisma.invitation.findFirst({
+      where: { id: invitationId, organizationId },
+    }),
+    getInvitationNotificationContext(organizationId, authUser?.userId || null),
+  ]);
+
+  if (!invitation) {
+    throw createError("Invitation not found.", 404);
+  }
+
+  if (invitation.status === "ACCEPTED") {
+    throw createError("Invitation already accepted.", 409);
+  }
+
+  const refreshed = await prisma.invitation.update({
+    where: { id: invitation.id },
+    data: {
+      token: crypto.randomUUID(),
+      status: "PENDING",
+      expiresAt: new Date(Date.now() + INVITATION_TTL_MS),
+    },
+  });
+
+  await logActivity({
+    organizationId,
+    performedBy: authUser?.userId || null,
+    action: "INVITATION_RESENT",
+    entityType: "invitation",
+    entityId: refreshed.id,
+    entityLabel: refreshed.email,
+  });
+
+  const inviteUrl = buildInvitationUrl(refreshed.token);
+  const invitationEmailDelivered = await sendInvitationEmailSafely({
+    invitation: refreshed,
+    inviteUrl,
+    organizationId,
+    organizationName: notificationContext.organizationName,
+    performedByName: notificationContext.performedByName,
+    warningMessage: "Invitation email failed to resend.",
+  });
+
+  logger.info("Invitation resent.", {
+    organizationId,
+    performedBy: authUser?.userId || null,
+    invitationId: refreshed.id,
+    email: refreshed.email,
+    role: refreshed.role,
+    invitationEmailDelivered,
+  });
+
+  return serializeInvitation(refreshed);
+}
+
+async function deleteInvitation(invitationId, authUser) {
+  const { organizationId } = await ensureInvitationContext(authUser);
+
+  const invitation = await prisma.invitation.findFirst({
+    where: { id: invitationId, organizationId },
+  });
+
+  if (!invitation) {
+    throw createError("Invitation not found.", 404);
+  }
+
+  if (invitation.status === "ACCEPTED") {
+    throw createError("Invitation already accepted.", 409);
+  }
+
+  await prisma.invitation.delete({
+    where: { id: invitation.id },
+  });
+
+  await logActivity({
+    organizationId,
+    performedBy: authUser?.userId || null,
+    action: "INVITATION_DELETED",
+    entityType: "invitation",
+    entityId: invitation.id,
+    entityLabel: invitation.email,
+  });
+
+  logger.info("Invitation deleted.", {
+    organizationId,
+    performedBy: authUser?.userId || null,
+    invitationId,
+    email: invitation.email,
+    status: invitation.status,
+  });
+
+  return { message: "Invitation deleted." };
 }
 
 async function acceptInvitation(data) {
@@ -244,10 +425,30 @@ async function acceptInvitation(data) {
       },
     });
 
+    await logActivity(
+      {
+        organizationId: normalizedInvitation.organizationId,
+        performedBy: user.id,
+        action: "INVITATION_ACCEPTED",
+        entityType: "invitation",
+        entityId: acceptedInvitation.id,
+        entityLabel: acceptedInvitation.email,
+      },
+      tx
+    );
+
     return {
       user,
       invitation: acceptedInvitation,
     };
+  });
+
+  logger.info("Invitation accepted.", {
+    organizationId: normalizedInvitation.organizationId,
+    invitationId: normalizedInvitation.id,
+    userId: result.user.id,
+    email: result.user.email,
+    role: result.user.role,
   });
 
   return {
@@ -259,5 +460,7 @@ async function acceptInvitation(data) {
 module.exports = {
   createInvitation,
   listInvitations,
+  resendInvitation,
+  deleteInvitation,
   acceptInvitation,
 };

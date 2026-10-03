@@ -8,5 +8,10 @@ const router = express.Router();
 router.use(authMiddleware);
 router.get("/me", authorizeRoles("ADMIN", "MANAGER"), organizationController.getMyOrganization);
 router.put("/me", authorizeRoles("ADMIN", "MANAGER"), organizationController.updateMyOrganization);
+router.get(
+  "/customers",
+  authorizeRoles("ADMIN", "MANAGER"),
+  organizationController.getOrganizationCustomers
+);
 
 module.exports = router;
